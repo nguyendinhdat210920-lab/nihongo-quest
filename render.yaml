@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: nihongo-quest
+    env: node
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: cd server && node server.js
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: VITE_API_URL
+        value: ""
+        sync: false

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import { existsSync } from "fs";
 import lessonsRouter from "./routes/lessons.js";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
@@ -42,6 +43,27 @@ app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/forum", forumRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/dashboard", dashboardRouter);
+
+// Serve frontend (Vite build) - try multiple possible paths (Render vs local)
+const distPath = [
+  path.resolve(__dirname, "..", "dist"),
+  path.resolve(process.cwd(), "..", "dist"),
+  path.resolve(process.cwd(), "dist"),
+].find((p) => existsSync(p));
+
+if (distPath) {
+  const indexPath = path.join(distPath, "index.html");
+  app.use(express.static(distPath));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(indexPath, (err) => err && next());
+  });
+} else {
+  console.warn("dist not found. Tried:", path.resolve(__dirname, "..", "dist"));
+  app.get("/", (req, res) =>
+    res.status(500).send("Frontend chưa build. Kiểm tra Build Command: npm run build")
+  );
+}
 
 const PORT = Number(process.env.PORT) || 3000;
 const server = app.listen(PORT, () =>
