@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <!-- Petal shading similar to your sample -->
+    <radialGradient id="petal" cx="38%" cy="32%" r="78%">
+      <stop offset="0%" stop-color="#FFB6D6"/>
+      <stop offset="55%" stop-color="#FF5FA9"/>
+      <stop offset="100%" stop-color="#FF2F8E"/>
+    </radialGradient>
+    <radialGradient id="petalHi" cx="32%" cy="26%" r="70%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="center" cx="40%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#FFE9A8"/>
+      <stop offset="70%" stop-color="#FFC24D"/>
+      <stop offset="100%" stop-color="#FF9A2E"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2.2" stdDeviation="2.2" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- 5-petal blossom (transparent background) -->
+  <g filter="url(#shadow)" transform="translate(64 64)">
+    <!-- One rounded petal -->
+    <g id="petalShape" transform="translate(0,-30)">
+      <path
+        d="M0 -10
+           C 14 -16 28 -6 28 8
+           C 28 22 14 32 0 32
+           C -14 32 -28 22 -28 8
+           C -28 -6 -14 -16 0 -10
+           Z"
+        fill="url(#petal)"
+      />
+      <path
+        d="M0 -6
+           C 10 -10 20 -2 20 8
+           C 20 18 10 26 0 26
+           C -10 26 -20 18 -20 8
+           C -20 -2 -10 -10 0 -6
+           Z"
+        fill="url(#petalHi)"
+        opacity="0.75"
+      />
+    </g>
+
+    <use href="#petalShape" transform="rotate(72)"/>
+    <use href="#petalShape" transform="rotate(144)"/>
+    <use href="#petalShape" transform="rotate(216)"/>
+    <use href="#petalShape" transform="rotate(288)"/>
+
+    <!-- center -->
+    <circle r="13" fill="url(#center)"/>
+    <circle r="4.5" fill="#FF2F8E" opacity="0.35"/>
+    <circle r="2" fill="#E63A86" opacity="0.55"/>
+  </g>
+</svg>
+

@@ -1,0 +1,151 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 221 39% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 221 39% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 221 39% 11%;
+
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 187 86% 53%;
+    --secondary-foreground: 221 39% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 330 81% 70%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 239 84% 67%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 239 84% 67%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 330 81% 70%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 239 84% 67%;
+
+    /* Custom tokens */
+    --gradient-primary: linear-gradient(135deg, hsl(239 84% 67%), hsl(187 86% 53%));
+    --gradient-accent: linear-gradient(135deg, hsl(330 81% 70%), hsl(239 84% 67%));
+    --gradient-hero: linear-gradient(135deg, hsl(239 84% 67% / 0.05), hsl(330 81% 70% / 0.08), hsl(187 86% 53% / 0.05));
+    --shadow-card: 0 4px 24px -4px hsl(239 84% 67% / 0.08);
+    --shadow-card-hover: 0 8px 32px -4px hsl(239 84% 67% / 0.15);
+    --shadow-glow: 0 0 40px hsl(239 84% 67% / 0.15);
+  }
+
+  .dark {
+    --background: 224 30% 8%;
+    --foreground: 210 40% 96%;
+
+    --card: 224 30% 12%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 224 30% 12%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 187 86% 53%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 224 30% 16%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 330 81% 70%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 224 30% 18%;
+    --input: 224 30% 18%;
+    --ring: 239 84% 67%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Noto Sans JP', 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-2xl;
+    box-shadow: var(--shadow-card);
+  }
+  .glass-card:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .gradient-bg {
+    background: var(--gradient-primary);
+  }
+  .gradient-accent-bg {
+    background: var(--gradient-accent);
+  }
+  .hero-gradient {
+    background: var(--gradient-hero);
+  }
+  .sakura-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Flashcard flip */
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
