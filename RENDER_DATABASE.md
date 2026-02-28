@@ -1,11 +1,17 @@
 # Cấu hình DATABASE_URL cho Render
 
-## Kiểm tra kết nối
+## Kiểm tra server
 
-Sau khi deploy, mở: **https://nihongo-quest-3080.onrender.com/api/health**
+Sau khi deploy, thử lần lượt:
 
-- `{"ok":true,"db":true}` → Kết nối DB thành công
-- `{"ok":false,"error":"..."}` → Lỗi kết nối, xem chi tiết trong `error`
+1. **https://nihongo-quest-3080.onrender.com/api/ping** → Phải thấy `{"pong":true}`
+2. **https://nihongo-quest-3080.onrender.com/api/health** → `{"ok":true,"db":true}` = DB OK
+
+**Nếu thấy "Not Found":**
+- Render có thể đang deploy **Static Site** thay vì **Web Service**
+- Vào Render → **Settings** → kiểm tra **Service Type** phải là **Web Service**
+- **Start Command** phải là: `cd server && node server.js`
+- **Root Directory** để **trống**
 
 ## Connection string
 

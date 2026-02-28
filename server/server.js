@@ -30,7 +30,10 @@ app.use(
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Health check - phải đặt trước các route khác
+// Ping - kiểm tra server nhận request (không cần DB)
+app.get("/api/ping", (req, res) => res.json({ pong: true }));
+
+// Health check - kiểm tra DB
 app.get("/api/health", async (req, res) => {
   try {
     const { pool, poolConnect } = await import("./db.js");
