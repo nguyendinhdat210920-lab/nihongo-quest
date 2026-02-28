@@ -30,6 +30,19 @@ app.use(
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Health check - phải đặt trước các route khác
+app.get("/api/health", async (req, res) => {
+  try {
+    const { pool, poolConnect } = await import("./db.js");
+    await poolConnect;
+    const r = await pool.query("SELECT 1 as ok");
+    res.json({ ok: true, db: !!r?.rows?.[0] });
+  } catch (e) {
+    console.error("Health check failed:", e);
+    res.status(500).json({ ok: false, error: e?.message || "DB error" });
+  }
+});
+
 app.use("/api/lessons", lessonsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
@@ -43,19 +56,6 @@ app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/forum", forumRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/dashboard", dashboardRouter);
-
-// Health check - test DB connection (for debugging)
-app.get("/api/health", async (req, res) => {
-  try {
-    const { pool, poolConnect } = await import("./db.js");
-    await poolConnect;
-    const r = await pool.query("SELECT 1 as ok");
-    res.json({ ok: true, db: !!r?.rows?.[0] });
-  } catch (e) {
-    console.error("Health check failed:", e);
-    res.status(500).json({ ok: false, error: e?.message || "DB error" });
-  }
-});
 
 // Serve frontend (Vite build) - try multiple possible paths (Render vs local)
 const distPath = [
