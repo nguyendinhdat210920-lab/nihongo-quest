@@ -130,6 +130,32 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// POST /api/auth/force-reset - reset mật khẩu bằng secret (chỉ dùng khi cần, xóa sau)
+// Body: { username, newPassword, secret } - secret = process.env.RESET_SECRET
+router.post("/force-reset", async (req, res) => {
+  const { username, newPassword, secret } = req.body;
+  const expected = process.env.RESET_SECRET;
+  if (!expected || secret !== expected) {
+    return res.status(403).json({ message: "Invalid" });
+  }
+  if (!username || !newPassword || newPassword.length < 6) {
+    return res.status(400).json({ message: "username và newPassword (≥6 ký tự) là bắt buộc" });
+  }
+  try {
+    await poolConnect;
+    const hash = hashPassword(newPassword);
+    await pool
+      .request()
+      .input("Username", sql.NVarChar(50), username)
+      .input("PasswordHash", sql.NVarChar(255), hash)
+      .query("UPDATE Users SET PasswordHash = @PasswordHash WHERE Username = @Username");
+    return res.json({ message: "Đã đổi mật khẩu. Đăng nhập với mật khẩu mới." });
+  } catch (e) {
+    console.error("force-reset error:", e);
+    return res.status(500).json({ message: e?.message || "Lỗi" });
+  }
+});
+
 // POST /api/auth/forgot-password - gửi yêu cầu đặt lại mật khẩu
 router.post("/forgot-password", async (req, res) => {
   const { email } = req.body;

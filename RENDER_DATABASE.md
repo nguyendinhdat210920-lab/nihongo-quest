@@ -28,3 +28,19 @@ postgresql://postgres.fliybguqwcftsxakxhde:[PASSWORD]@aws-1-ap-south-1.pooler.su
 ```
 
 **Lưu ý:** Mật khẩu có ký tự đặc biệt cần encode: `@` → `%40`, `$` → `%24`
+
+---
+
+## Reset mật khẩu qua API (không cần SQL)
+
+1. Vào **Render** → **Environment** → thêm biến:
+   - **Key:** `RESET_SECRET`
+   - **Value:** một chuỗi bí mật bất kỳ (vd: `mysecret123`)
+
+2. Deploy lại, rồi gọi API (PowerShell hoặc Postman):
+   ```powershell
+   Invoke-RestMethod -Uri "https://nihongo-quest-3o80.onrender.com/api/auth/force-reset" -Method POST -ContentType "application/json" -Body '{"username":"Đình Đạt","newPassword":"123456","secret":"mysecret123"}'
+   ```
+   (Thay `mysecret123` bằng giá trị đã đặt trong RESET_SECRET)
+
+3. Đăng nhập với mật khẩu mới. Sau khi xong, xóa biến `RESET_SECRET` trên Render.
