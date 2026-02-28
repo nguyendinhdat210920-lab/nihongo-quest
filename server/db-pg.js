@@ -55,6 +55,7 @@ const pgSql = (sql) => {
     .replace(/\bISNULL\s*\(\s*d\.IsPublic\s*,\s*1\s*\)/gi, "COALESCE(d.is_public, true)")
     .replace(/\bISNULL\s*\(/gi, "COALESCE(")
     .replace(/\bN'/g, "'")
+    .replace(/\bLTRIM\s*\(\s*RTRIM\s*\(\s*([^)]+)\s*\)\s*\)/gi, "TRIM($1)")
     .replace(/INSERT INTO [Ff]lashcards[\s\S]*?VALUES\s*\([^)]+,\s*0\s*\)/gi, (m) => m.replace(/,\s*0\s*\)\s*$/, ", false)"))
     .replace(/INSERT INTO [Uu]sers[\s\S]*?VALUES\s*\([^)]+,\s*0\s*\)/gi, (m) => m.replace(/,\s*0\s*\)\s*$/, ", false)"))
     .replace(/\bSELECT\s+TOP\s+(\d+)\s+/gi, (_, n) => `SELECT `)
