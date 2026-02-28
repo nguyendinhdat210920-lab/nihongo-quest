@@ -56,6 +56,7 @@ const pgSql = (sql) => {
     .replace(/\bISNULL\s*\(/gi, "COALESCE(")
     .replace(/\bN'/g, "'")
     .replace(/INSERT INTO [Ff]lashcards[\s\S]*?VALUES\s*\([^)]+,\s*0\s*\)/gi, (m) => m.replace(/,\s*0\s*\)\s*$/, ", false)"))
+    .replace(/INSERT INTO [Uu]sers[\s\S]*?VALUES\s*\([^)]+,\s*0\s*\)/gi, (m) => m.replace(/,\s*0\s*\)\s*$/, ", false)"))
     .replace(/\bSELECT\s+TOP\s+(\d+)\s+/gi, (_, n) => `SELECT `)
     .replace(/(\s+ORDER\s+BY\s+[^;]+?)(\s*)(;?\s*)$/gim, (m, orderBy, sp, end) => {
       const topMatch = sql.match(/\bSELECT\s+TOP\s+(\d+)\s+/i);

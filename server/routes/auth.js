@@ -59,7 +59,7 @@ router.post("/register", async (req, res) => {
     });
   } catch (error) {
     console.error("Error during register:", error);
-    return res.status(500).json({ message: "Đăng ký thất bại" });
+    return res.status(500).json({ message: "Đăng ký thất bại. Hãy thử lại." });
   }
 });
 
