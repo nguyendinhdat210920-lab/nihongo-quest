@@ -1,8 +1,10 @@
 import pg from "pg";
 
+const dbUrl = process.env.DATABASE_URL || "";
+const useSsl = dbUrl.includes("supabase") || dbUrl.includes("pooler.supabase");
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes("supabase") ? { rejectUnauthorized: false } : false,
+  connectionString: dbUrl,
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
 });
 
 // Chuyển snake_case -> PascalCase để tương thích code SQL Server

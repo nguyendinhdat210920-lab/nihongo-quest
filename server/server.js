@@ -44,6 +44,19 @@ app.use("/api/forum", forumRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/dashboard", dashboardRouter);
 
+// Health check - test DB connection (for debugging)
+app.get("/api/health", async (req, res) => {
+  try {
+    const { pool, poolConnect } = await import("./db.js");
+    await poolConnect;
+    const r = await pool.query("SELECT 1 as ok");
+    res.json({ ok: true, db: !!r?.rows?.[0] });
+  } catch (e) {
+    console.error("Health check failed:", e);
+    res.status(500).json({ ok: false, error: e?.message || "DB error" });
+  }
+});
+
 // Serve frontend (Vite build) - try multiple possible paths (Render vs local)
 const distPath = [
   path.resolve(__dirname, "..", "dist"),
@@ -66,9 +79,16 @@ if (distPath) {
 }
 
 const PORT = Number(process.env.PORT) || 3000;
-const server = app.listen(PORT, () =>
-  console.log(`Server running on http://localhost:${PORT}`),
-);
+const server = app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+  if (process.env.DATABASE_URL) {
+    const u = process.env.DATABASE_URL;
+    const hasPooler = u.includes("pooler.supabase");
+    console.log(`DB: ${hasPooler ? "Supabase pooler" : u.includes("supabase") ? "Supabase direct" : "configured"}`);
+  } else {
+    console.warn("DATABASE_URL not set - using SQL Server");
+  }
+});
 
 server.on("error", (err) => {
   if (err && err.code === "EADDRINUSE") {

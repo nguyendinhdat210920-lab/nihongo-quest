@@ -58,8 +58,12 @@ router.post("/register", async (req, res) => {
       createdAt: row.CreatedAt,
     });
   } catch (error) {
-    console.error("Error during register:", error);
-    return res.status(500).json({ message: "Đăng ký thất bại. Hãy thử lại." });
+    console.error("Error during register:", error?.message, error);
+    const isDb = /connection|ECONNREFUSED|ENOTFOUND|timeout|connect/i.test(error?.message || "");
+    return res.status(500).json({
+      message: "Đăng ký thất bại. Hãy thử lại.",
+      ...(isDb && { hint: "Lỗi kết nối DB. Kiểm tra DATABASE_URL trên Render." }),
+    });
   }
 });
 
@@ -171,7 +175,11 @@ router.post("/forgot-password", async (req, res) => {
       throw e;
     }
 
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+    const baseUrl =
+      process.env.FRONTEND_URL ||
+      process.env.API_URL ||
+      (req.headers.origin || req.headers.referer)?.replace(/\/$/, "") ||
+      "http://localhost:8080";
     const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
     return res.status(200).json({
