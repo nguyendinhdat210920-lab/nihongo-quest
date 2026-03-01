@@ -6,7 +6,8 @@ const router = express.Router();
 const getCount = async (table) => {
   try {
     const result = await pool.request().query(`SELECT COUNT(*) AS Cnt FROM ${table}`);
-    return result.recordset?.[0]?.Cnt || 0;
+    const row = result.recordset?.[0];
+    return row?.Cnt ?? row?.cnt ?? 0;
   } catch {
     return 0;
   }

@@ -81,7 +81,7 @@ export default function Landing() {
             <div className="mt-12 flex items-center justify-center gap-8 text-sm text-muted-foreground">
               <div><span className="text-2xl font-bold text-foreground">{formatNum(stats?.totalUsers)}</span><br />Người học</div>
               <div className="w-px h-10 bg-border" />
-              <div><span className="text-2xl font-bold text-foreground">{formatNum(stats?.totalFlashcards ?? stats?.totalDecks)}</span><br />Flashcards</div>
+              <div><span className="text-2xl font-bold text-foreground">{formatNum(stats?.totalDecks)}</span><br />Bộ thẻ</div>
               <div className="w-px h-10 bg-border" />
               <div><span className="text-2xl font-bold text-foreground">{formatNum(stats?.totalQuizzes)}</span><br />Quiz</div>
             </div>

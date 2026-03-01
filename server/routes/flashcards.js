@@ -54,7 +54,7 @@ router.get("/decks", async (req, res) => {
       ownerName: decodeMaybe(row.OwnerUsername),
       jlptLevel: row.JlptLevel || "N5",
       isPublic: !!row.IsPublic,
-      cardCount: row.CardCount ?? 0,
+      cardCount: row.CardCount ?? row.Cardcount ?? 0,
       createdAt: row.CreatedAt,
     }));
 
