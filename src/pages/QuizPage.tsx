@@ -73,19 +73,20 @@ export default function QuizPage() {
 
   const activeUser = localStorage.getItem("username") || currentUser.username;
 
-  const fetchQuizzes = async () => {
+  const fetchQuizzes = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const res = await axios.get<QuizSummary[]>(apiUrl('/api/quizzes'), {
         params: { username: activeUser },
+        headers: { "x-user": encodeURIComponent(activeUser) },
       });
       setQuizzes(res.data);
     } catch (err) {
       console.error('Failed to fetch quizzes', err);
       setError('Không thể tải danh sách quiz.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -176,8 +177,7 @@ export default function QuizPage() {
           score: scoreNow,
           totalQuestions: questions.length,
         });
-        toast.success(`Đã lưu: ${scoreNow}/${questions.length}`);
-        fetchQuizzes();
+        fetchQuizzes(true);
       } catch (err) {
         console.error('Failed to save quiz result', err);
         setSaveResultError("Không lưu được kết quả. Điểm vẫn hiển thị.");
@@ -251,6 +251,7 @@ export default function QuizPage() {
       // refresh list with progress
       const res = await axios.get<QuizSummary[]>(apiUrl('/api/quizzes'), {
         params: { username: activeUser },
+        headers: { "x-user": encodeURIComponent(activeUser) },
       });
       setQuizzes(res.data);
     } catch (err) {
@@ -289,7 +290,7 @@ export default function QuizPage() {
           <button
             onClick={() => {
               resetQuiz();
-              fetchQuizzes();
+              fetchQuizzes(true);
             }}
             className="gradient-bg text-primary-foreground px-6 py-2.5 rounded-xl font-medium flex items-center gap-2 mx-auto hover:opacity-90 transition-opacity"
           >
@@ -506,6 +507,7 @@ export default function QuizPage() {
                         });
                         const res = await axios.get<QuizSummary[]>(apiUrl('/api/quizzes'), {
                           params: { username: activeUser },
+                          headers: { "x-user": encodeURIComponent(activeUser) },
                         });
                         setQuizzes(res.data);
                       } catch (err) {

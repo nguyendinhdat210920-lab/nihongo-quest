@@ -44,8 +44,10 @@ router.get("/", async (req, res) => {
       createdAt: row.CreatedAt,
     }));
 
-    const progressUsername = req.query.username;
-    if (progressUsername && typeof progressUsername === "string") {
+    const progressUsername =
+      (req.query.username && typeof req.query.username === "string" ? req.query.username : null) ||
+      decodeHeaderUser(req.header("x-user"));
+    if (progressUsername) {
       const progressResult = await pool
         .request()
         .input("Username", sql.NVarChar(255), progressUsername)
