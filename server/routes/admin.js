@@ -14,7 +14,6 @@ const decodeHeaderUser = (value) => {
 
 const checkIsAdmin = async (username) => {
   if (!username) return false;
-  if (username === "Đình Đạt") return true;
   try {
     await poolConnect;
     const r = await pool
@@ -95,7 +94,7 @@ router.get("/users", requireAdmin, async (_req, res) => {
       username: row.Username,
       email: row.Email,
       isBanned: !!row.IsBanned,
-      isAdmin: row.IsAdmin !== undefined ? !!row.IsAdmin : row.Username === "Đình Đạt",
+      isAdmin: row.IsAdmin !== undefined ? !!row.IsAdmin : false,
       createdAt: row.CreatedAt,
     }));
 
@@ -150,7 +149,9 @@ router.get("/stats", requireAdmin, async (_req, res) => {
   try {
     await poolConnect;
 
+    const ALLOWED_TABLES = ["Users", "Lessons", "Materials", "Quizzes", "QuizResults"];
     const getCount = async (table) => {
+      if (!ALLOWED_TABLES.includes(table)) return 0;
       try {
         const result = await pool
           .request()

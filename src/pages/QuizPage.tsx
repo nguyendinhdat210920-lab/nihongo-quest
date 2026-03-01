@@ -4,6 +4,7 @@ import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X, Share
 import axios from 'axios';
 import { currentUser } from '@/lib/mockData';
 import { apiUrl } from '@/lib/api';
+import { toast } from 'sonner';
 import { playCorrect, playWrong, playComplete } from '@/lib/quizSounds';
 
 interface QuizSummary {
@@ -426,7 +427,9 @@ export default function QuizPage() {
                           headers: { "x-user": encodeURIComponent(activeUser) },
                         });
                         setShareLinkModal({ id: quiz.id, url: r.data?.url || "" });
-                      } catch {}
+                      } catch {
+                        toast.error("Không thể tạo link chia sẻ");
+                      }
                     }}
                     title="Chia sẻ"
                   >
@@ -721,6 +724,7 @@ export default function QuizPage() {
                     type="button"
                     onClick={() => {
                       navigator.clipboard.writeText(shareLinkModal!.url);
+                      toast.success("Đã copy link");
                     }}
                     className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
                   >

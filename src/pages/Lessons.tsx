@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { apiUrl } from "@/lib/api";
+import { toast } from "sonner";
 import {
   BookOpen,
   AlertCircle,
@@ -413,7 +414,9 @@ export default function Lessons() {
                                       headers: { "x-user": encodeURIComponent(activeUser) },
                                     });
                                     setShareLinkModal({ id: lesson.Id, url: r.data?.url || "" });
-                                  } catch {}
+                                  } catch {
+                                    toast.error("Không thể tạo link chia sẻ");
+                                  }
                                 }}
                                 className="p-2 hover:bg-muted rounded-full"
                                 title="Chia sẻ"
@@ -546,6 +549,7 @@ export default function Lessons() {
                     type="button"
                     onClick={() => {
                       navigator.clipboard.writeText(shareLinkModal!.url);
+                      toast.success("Đã copy link");
                     }}
                     className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
                   >

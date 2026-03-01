@@ -105,14 +105,15 @@ router.get("/posts", async (req, res) => {
     const postIds = rows.map((r) => r.Id);
 
     let likedSet = new Set();
-    if (requester && postIds.length) {
+    const safePostIds = postIds.filter((id) => /^\d+$/.test(String(id)));
+    if (requester && safePostIds.length) {
       try {
-        const likedResult = await pool
-          .request()
-          .input("Username", sql.NVarChar(255), requester)
-          .query(
-            `SELECT PostId FROM ForumLikes WHERE Username = @Username AND PostId IN (${postIds.join(",")})`
-          );
+        const placeholders = safePostIds.map((_, i) => `@P${i}`).join(",");
+        const req2 = pool.request().input("Username", sql.NVarChar(255), requester);
+        safePostIds.forEach((id, i) => req2.input(`P${i}`, sql.Int, Number(id)));
+        const likedResult = await req2.query(
+          `SELECT PostId FROM ForumLikes WHERE Username = @Username AND PostId IN (${placeholders})`
+        );
         likedSet = new Set((likedResult.recordset || []).map((r) => r.PostId));
       } catch {
         // ForumLikes table may not exist yet

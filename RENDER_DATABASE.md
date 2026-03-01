@@ -29,7 +29,7 @@ postgresql://postgres.fliybguqwcftsxakxhde:[PASSWORD]@aws-1-ap-south-1.pooler.su
 
 **Lưu ý:** Mật khẩu có ký tự đặc biệt cần encode: `@` → `%40`, `$` → `%24`
 
-**Chia sẻ bài học & quiz:** Chạy `server/sql/lesson-shares.sql` và `server/sql/quiz-shares.sql` trong Supabase SQL Editor (nếu bảng chưa có).
+**Chia sẻ bài học & quiz (link):** Chạy `server/sql/share-links.sql` trong Supabase SQL Editor (nếu bảng chưa có).
 
 ---
 
@@ -37,15 +37,15 @@ postgresql://postgres.fliybguqwcftsxakxhde:[PASSWORD]@aws-1-ap-south-1.pooler.su
 
 1. Vào Render → **Environment** → thêm:
    - **Key:** `ADMIN_RESET_SECRET`
-   - **Value:** `nihongo2024` (hoặc chuỗi bí mật bạn chọn)
+   - **Value:** (chuỗi bí mật mạnh, ví dụ tạo bằng `openssl rand -hex 32`)
 
 2. Deploy lại, rồi gọi API (Postman, curl, hoặc browser console):
 
 ```
-POST https://nihongo-quest-3o80.onrender.com/api/auth/admin-reset
+POST https://[domain-của-bạn].onrender.com/api/auth/admin-reset
 Content-Type: application/json
 
-{"username":"Đình Đạt","newPassword":"123456","secret":"nihongo2024"}
+{"username":"username_admin","newPassword":"matkhau_moi","secret":"<ADMIN_RESET_SECRET>"}
 ```
 
 3. Đăng nhập với mật khẩu mới. Sau đó có thể xóa `ADMIN_RESET_SECRET` trên Render.

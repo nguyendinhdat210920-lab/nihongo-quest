@@ -112,7 +112,7 @@ router.post("/login", async (req, res) => {
         .json({ message: "Sai tên đăng nhập/email hoặc mật khẩu" });
     }
 
-    const isAdmin = !!user.IsAdmin || user.Username === "Đình Đạt";
+    const isAdmin = !!user.IsAdmin;
 
     return res.json({
       id: user.Id,
@@ -125,7 +125,7 @@ router.post("/login", async (req, res) => {
   } catch (error) {
     console.error("Error during login:", error);
     return res.status(500).json({
-      message: "Đăng nhập thất bại. " + (error?.message || ""),
+      message: "Đăng nhập thất bại. Kiểm tra lại tài khoản/mật khẩu.",
     });
   }
 });
@@ -211,7 +211,6 @@ router.post("/forgot-password", async (req, res) => {
 
     return res.status(200).json({
       message: "Nếu email tồn tại, bạn sẽ nhận được link đặt lại mật khẩu.",
-      resetLink,
     });
   } catch (error) {
     console.error("Error during forgot-password:", error);
