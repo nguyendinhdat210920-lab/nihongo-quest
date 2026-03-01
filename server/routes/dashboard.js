@@ -48,7 +48,7 @@ router.get("/stats", async (req, res) => {
           SELECT COUNT(*) AS totalWords
           FROM Flashcards f
           INNER JOIN Decks d ON f.DeckId = d.Id
-          WHERE d.OwnerUsername = @Username AND f.Learned = 1
+          WHERE d.OwnerUsername = @Username AND f.Learned = true
         `);
       totalWords = wordsResult.recordset?.[0]?.Totalwords ?? wordsResult.recordset?.[0]?.totalWords ?? 0;
     } catch {

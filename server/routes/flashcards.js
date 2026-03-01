@@ -330,7 +330,7 @@ router.put("/cards/:id", async (req, res) => {
       updates.push("Example = @Example");
     }
     if (learned !== undefined) {
-      request.input("Learned", sql.Bit, learned ? 1 : 0);
+      request.input("Learned", sql.Bit, !!learned);
       updates.push("Learned = @Learned");
     }
 
