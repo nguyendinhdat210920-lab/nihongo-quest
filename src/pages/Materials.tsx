@@ -126,7 +126,7 @@ export default function Materials() {
               <FileText className="text-accent" /> Tài liệu
             </h1>
             <p className="text-muted-foreground mt-1">
-              Upload và tìm kiếm tài liệu học tiếng Nhật (PDF, ảnh, v.v.)
+              Kho tài liệu – upload và tải file PDF, ảnh, tài liệu học tiếng Nhật
             </p>
           </div>
         </div>

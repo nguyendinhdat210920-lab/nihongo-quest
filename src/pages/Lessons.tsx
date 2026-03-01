@@ -17,8 +17,39 @@ import {
   Download,
   Lock,
   Globe,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { currentUser } from "@/lib/mockData";
+import { speakText } from "@/lib/speakText";
+
+/** Tách nội dung thành các đoạn, từ tiếng Nhật có thể click để nghe phát âm */
+function LessonContentWithSpeak({ content }: { content: string }) {
+  const hasJapanese = (s: string) => /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(s);
+  const parts = content.split(/([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)/g).filter(Boolean);
+
+  return (
+    <div className="whitespace-pre-line text-[1.05rem] leading-relaxed">
+      {parts.map((part, i) =>
+        hasJapanese(part) ? (
+          <span
+            key={i}
+            onClick={(e) => speakText(part, e as unknown as React.MouseEvent)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && speakText(part)}
+            className="cursor-pointer hover:bg-primary/15 hover:underline decoration-dotted rounded px-0.5 -mx-0.5 transition-colors"
+            title="Click để nghe phát âm"
+          >
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </div>
+  );
+}
 
 interface Lesson {
   Id: number;
@@ -144,13 +175,116 @@ export default function Lessons() {
     return matchesSearch && matchesMine;
   });
 
+  // Full-page reader khi đang đọc bài
+  if (selectedLesson) {
+    const idx = filteredLessons.findIndex((l) => l.Id === selectedLesson.Id);
+    const prevLesson = idx > 0 ? filteredLessons[idx - 1] : null;
+    const nextLesson = idx >= 0 && idx < filteredLessons.length - 1 ? filteredLessons[idx + 1] : null;
+
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-6 max-w-3xl">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <button
+                onClick={() => setSelectedLesson(null)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronLeft size={18} /> Quay lại danh sách
+              </button>
+              <div className="flex items-center gap-2">
+                {prevLesson && (
+                  <button
+                    onClick={() => setSelectedLesson(prevLesson)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm"
+                  >
+                    <ChevronLeft size={16} /> Trước
+                  </button>
+                )}
+                {nextLesson && (
+                  <button
+                    onClick={() => setSelectedLesson(nextLesson)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm"
+                  >
+                    Sau <ChevronRight size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <article className="glass-card border rounded-2xl p-8 md:p-10">
+              <header className="mb-8 pb-6 border-b">
+                <h1 className="text-2xl md:text-3xl font-bold font-jp mb-2">{selectedLesson.Title}</h1>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <UserCircle2 size={16} />
+                  {selectedLesson.CreatedBy || "Hệ thống"}
+                </div>
+              </header>
+
+              <div className="prose prose-lg max-w-none">
+                <LessonContentWithSpeak content={selectedLesson.Content} />
+              </div>
+
+              {selectedLesson.AttachmentUrl && (
+                <div className="mt-8 pt-6 border-t flex flex-wrap gap-3">
+                  <a
+                    href={selectedLesson.AttachmentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted text-sm"
+                  >
+                    <Eye size={18} /> Xem tệp đính kèm
+                  </a>
+                  <a
+                    href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(selectedLesson.AttachmentUrl)}`}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted text-sm"
+                  >
+                    <Download size={18} /> Tải về
+                  </a>
+                </div>
+              )}
+            </article>
+
+            <div className="flex justify-between">
+              {prevLesson ? (
+                <button
+                  onClick={() => setSelectedLesson(prevLesson)}
+                  className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft size={18} /> {prevLesson.Title}
+                </button>
+              ) : (
+                <span />
+              )}
+              {nextLesson && (
+                <button
+                  onClick={() => setSelectedLesson(nextLesson)}
+                  className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-right max-w-[50%] truncate"
+                >
+                  {nextLesson.Title} <ChevronRight size={18} />
+                </button>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <BookOpen className="text-primary" /> Bài học tiếng Nhật
+        <div className="flex flex-col gap-2 mb-8">
+          <h1 className="text-3xl font-bold font-jp flex items-center gap-2">
+            <BookOpen className="text-primary" /> Bài học
           </h1>
+          <p className="text-muted-foreground">
+            Đọc và học bài học tiếng Nhật trực tiếp trên web. Click vào bài để đọc.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -191,7 +325,7 @@ export default function Lessons() {
                 <motion.div
                   key={lesson.Id}
                   layout
-                  className="glass-card p-6 border rounded-xl shadow-sm relative cursor-pointer hover:shadow-md transition-shadow"
+                  className="glass-card p-5 border rounded-xl cursor-pointer hover:border-primary/30 hover:shadow-lg transition-all group"
                   onClick={() => {
                     if (editingId === lesson.Id) return;
                     setSelectedLesson(lesson);
@@ -225,8 +359,13 @@ export default function Lessons() {
                     </div>
                   ) : (
                     <>
+                      <div className="flex items-start gap-4">
+                        <div className="shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                          <BookOpen size={24} />
+                        </div>
+                        <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-4">
-                        <h3 className="text-xl font-bold mb-2">{lesson.Title}</h3>
+                        <h3 className="text-lg font-bold group-hover:text-primary transition-colors">{lesson.Title}</h3>
                         <div className="flex items-center gap-2 flex-wrap justify-end">
                           <span
                             className={`text-[11px] px-2 py-1 rounded-full border flex items-center gap-1 ${isLessonPublic(lesson) ? "border-emerald-500/30 text-emerald-700" : "border-amber-500/30 text-amber-700"}`}
@@ -269,23 +408,19 @@ export default function Lessons() {
                           )}
                         </div>
                       </div>
-                      <p className="text-muted-foreground mb-4 whitespace-pre-line">
-                        {lesson.Content.length > 220 ? `${lesson.Content.slice(0, 220)}...` : lesson.Content}
+                      <p className="text-muted-foreground text-sm mb-2 line-clamp-2">
+                        {lesson.Content.length > 120 ? `${lesson.Content.slice(0, 120)}...` : lesson.Content}
                       </p>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><UserCircle2 size={14}/> {lesson.CreatedBy || "Hệ thống"}</span>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><UserCircle2 size={12}/> {lesson.CreatedBy || "Hệ thống"}</span>
+                        <span>~{Math.ceil(lesson.Content.length / 400)} phút đọc</span>
                         {lesson.AttachmentUrl && (
-                          <div className="flex gap-3 ml-auto">
-                            <a onClick={(e) => e.stopPropagation()} href={lesson.AttachmentUrl} target="_blank" className="flex items-center gap-1 text-primary hover:underline"><Eye size={14}/> Xem</a>
-                            <a
-                              onClick={(e) => e.stopPropagation()}
-                              href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(lesson.AttachmentUrl)}`}
-                              className="flex items-center gap-1 text-primary hover:underline"
-                            >
-                              <Download size={14}/> Tải về
-                            </a>
-                          </div>
+                          <span className="flex items-center gap-1 text-primary">
+                            <Eye size={12}/> Có đính kèm
+                          </span>
                         )}
+                      </div>
+                        </div>
                       </div>
                     </>
                   )}
@@ -341,76 +476,6 @@ export default function Lessons() {
           </div>
         </div>
       </motion.div>
-
-      {/* Modal xem chi tiết */}
-      <AnimatePresence>
-        {selectedLesson && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setSelectedLesson(null)}
-          >
-            <motion.div
-              className="w-full max-w-3xl glass-card border rounded-2xl shadow-xl overflow-hidden"
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-5 border-b flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-xl font-bold truncate">{selectedLesson.Title}</h3>
-                    <span className={`text-[11px] px-2 py-1 rounded-full border flex items-center gap-1 ${isLessonPublic(selectedLesson) ? "border-emerald-500/30 text-emerald-700" : "border-amber-500/30 text-amber-700"}`}>
-                      {isLessonPublic(selectedLesson) ? <Globe size={12} /> : <Lock size={12} />}
-                      {isLessonPublic(selectedLesson) ? "Công khai" : "Riêng tư"}
-                    </span>
-                    {selectedLesson.Status && (
-                      <span className="text-[11px] px-2 py-1 rounded-full border text-muted-foreground">
-                        {selectedLesson.Status}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-                    <UserCircle2 size={14} /> {selectedLesson.CreatedBy || "Hệ thống"}
-                  </div>
-                </div>
-                <button
-                  className="p-2 rounded-full hover:bg-muted"
-                  onClick={() => setSelectedLesson(null)}
-                  aria-label="Đóng"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="p-5 space-y-4 max-h-[70vh] overflow-auto">
-                <div className="text-sm whitespace-pre-line">{selectedLesson.Content}</div>
-
-                {selectedLesson.AttachmentUrl && (
-                  <div className="pt-2 border-t flex flex-wrap gap-3">
-                    <a
-                      href={selectedLesson.AttachmentUrl}
-                      target="_blank"
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border hover:bg-muted text-sm"
-                    >
-                      <Eye size={16} /> Xem tệp đính kèm
-                    </a>
-                    <a
-                      href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(selectedLesson.AttachmentUrl)}`}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border hover:bg-muted text-sm"
-                    >
-                      <Download size={16} /> Tải về
-                    </a>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
