@@ -34,6 +34,8 @@ const TABLE_MAP = {
   ForumLikes: "forum_likes",
   ChatMessages: "chat_messages",
   PasswordResetTokens: "password_reset_tokens",
+  LessonShares: "lesson_shares",
+  QuizShares: "quiz_shares",
 };
 
 const pgSql = (sql) => {
@@ -79,7 +81,7 @@ const pgSql = (sql) => {
   for (const [k, v] of Object.entries(TABLE_MAP)) {
     s = s.replace(new RegExp(`\\b${k}\\b`, "g"), v);
   }
-  s = s.replace(/\b(Id|Username|Email|PasswordHash|IsBanned|IsAdmin|CreatedAt|Title|Content|CreatedBy|AttachmentUrl|AttachmentType|Status|IsPublic|Course|Tags|FileUrl|FileType|UploaderName|Description|CreatorName|QuestionCount|QuizId|QuestionText|OptionA|OptionB|OptionC|OptionD|CorrectOption|Score|TotalQuestions|OwnerUsername|JlptLevel|Front|Back|Example|Learned|AuthorUsername|PostId|Message|Token|ExpiresAt|DeckId|FileName)\b/g, (m) => toSnakeCase(m));
+  s = s.replace(/\b(Id|Username|Email|PasswordHash|IsBanned|IsAdmin|CreatedAt|Title|Content|CreatedBy|AttachmentUrl|AttachmentType|Status|IsPublic|Course|Tags|FileUrl|FileType|UploaderName|Description|CreatorName|QuestionCount|QuizId|QuestionText|OptionA|OptionB|OptionC|OptionD|CorrectOption|Score|TotalQuestions|OwnerUsername|JlptLevel|Front|Back|Example|Learned|AuthorUsername|PostId|Message|Token|ExpiresAt|DeckId|FileName|LessonId|SharedWithUsername)\b/g, (m) => toSnakeCase(m));
 
   if (returnCols.length) {
     s = s.replace(/(\))(\s*;?\s*)$/, `$1 RETURNING ${returnCols.join(", ")}$2`);

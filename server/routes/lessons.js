@@ -122,14 +122,22 @@ router.get("/", async (req, res) => {
 
         if (username) {
             request.input("Username", sql.NVarChar(255), username);
-            query += `WHERE ${publicPredicate} OR CreatedBy = @Username `;
+            query += `WHERE ${publicPredicate} OR CreatedBy = @Username OR Id IN (SELECT LessonId FROM LessonShares WHERE SharedWithUsername = @Username) `;
         } else {
             if (publicPredicate !== "(1 = 1)") query += `WHERE ${publicPredicate} `;
         }
 
         query += "ORDER BY Id DESC";
 
-        const result = await request.query(query);
+        let result;
+        try {
+            result = await request.query(query);
+        } catch (e) {
+            if (e?.message?.includes("lesson_shares") || e?.message?.includes("does not exist")) {
+                const fallbackQuery = `SELECT Id, Title, Content, CreatedBy, AttachmentUrl, AttachmentType${hasStatus ? ", Status" : ""}${hasIsPublic ? ", IsPublic" : ""} FROM Lessons WHERE ${publicPredicate}${username ? " OR CreatedBy = @Username" : ""} ORDER BY Id DESC`;
+                result = await request.query(fallbackQuery);
+            } else throw e;
+        }
         const rows = result.recordset || [];
         const mapped = rows.map((row) => ({
             ...row,
@@ -173,7 +181,7 @@ router.post("/", upload.single("file"), async (req, res) => {
             .input("AttachmentUrl", sql.NVarChar(500), attachmentUrl)
             .input("AttachmentType", sql.NVarChar(50), attachmentType);
 
-        if (hasIsPublic) request.input("IsPublic", sql.Bit, isPublic ? 1 : 0);
+        if (hasIsPublic) request.input("IsPublic", sql.Bit, !!isPublic);
 
         let query = "";
         if (hasStatus && hasIsPublic) {
@@ -233,7 +241,7 @@ router.put("/:id", upload.single("file"), async (req, res) => {
             .input("Content", sql.NVarChar(sql.MAX), content)
             .input("Url", sql.NVarChar(500), attachmentUrl)
             .input("Type", sql.NVarChar(50), attachmentType);
-        if (hasIsPublic) request.input("IsPublic", sql.Bit, parseIsPublic(req.body.isPublic) ? 1 : 0);
+        if (hasIsPublic) request.input("IsPublic", sql.Bit, !!parseIsPublic(req.body.isPublic));
 
         const query = hasIsPublic
             ? "UPDATE Lessons SET Title = @Title, Content = @Content, AttachmentUrl = @Url, AttachmentType = @Type, IsPublic = @IsPublic WHERE Id = @Id"
@@ -244,6 +252,82 @@ router.put("/:id", upload.single("file"), async (req, res) => {
         res.json({ message: "Updated" });
     } catch (error) {
         res.status(500).json({ message: "Failed to update" });
+    }
+});
+
+// GET: Danh sách người được chia sẻ
+router.get("/:id/shares", async (req, res) => {
+    const { id } = req.params;
+    const requester = decodeHeaderUser(req.header("x-user"));
+
+    try {
+        await poolConnect;
+        const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatedBy FROM Lessons WHERE Id = @Id");
+        if (!check.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
+        const owner = decodeMaybe(check.recordset[0].CreatedBy);
+        if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới xem được danh sách chia sẻ" });
+
+        const result = await pool.request().input("LessonId", sql.Int, id)
+            .query("SELECT SharedWithUsername FROM LessonShares WHERE LessonId = @LessonId");
+        const list = (result.recordset || []).map((r) => decodeMaybe(r.SharedWithUsername ?? r.SharedwithUsername) || "").filter(Boolean);
+        res.json({ sharedWith: list });
+    } catch (e) {
+        if (e?.message?.includes("lesson_shares") || e?.message?.includes("does not exist")) {
+            return res.json({ sharedWith: [] });
+        }
+        res.status(500).json({ message: "Failed to fetch shares" });
+    }
+});
+
+// POST: Chia sẻ bài học với học viên
+router.post("/:id/share", async (req, res) => {
+    const { id } = req.params;
+    const { username: shareUsername } = req.body;
+    const requester = decodeHeaderUser(req.header("x-user"));
+
+    if (!shareUsername || typeof shareUsername !== "string") {
+        return res.status(400).json({ message: "Cần username người được chia sẻ" });
+    }
+
+    try {
+        await poolConnect;
+        const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatedBy FROM Lessons WHERE Id = @Id");
+        if (!check.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
+        const owner = decodeMaybe(check.recordset[0].CreatedBy);
+        if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới chia sẻ được" });
+
+        await pool.request()
+            .input("LessonId", sql.Int, id)
+            .input("SharedWithUsername", sql.NVarChar(255), shareUsername.trim())
+            .query("INSERT INTO LessonShares (LessonId, SharedWithUsername) VALUES (@LessonId, @SharedWithUsername) ON CONFLICT (LessonId, SharedWithUsername) DO NOTHING");
+        res.json({ message: "Đã chia sẻ" });
+    } catch (e) {
+        if (e?.message?.includes("lesson_shares") || e?.message?.includes("does not exist")) {
+            return res.status(400).json({ message: "Chưa có bảng chia sẻ. Chạy server/sql/lesson-shares.sql" });
+        }
+        res.status(500).json({ message: "Không thể chia sẻ" });
+    }
+});
+
+// DELETE: Bỏ chia sẻ
+router.delete("/:id/share/:username", async (req, res) => {
+    const { id, username } = req.params;
+    const requester = decodeHeaderUser(req.header("x-user"));
+
+    try {
+        await poolConnect;
+        const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatedBy FROM Lessons WHERE Id = @Id");
+        if (!check.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
+        const owner = decodeMaybe(check.recordset[0].CreatedBy);
+        if (owner !== requester) return res.status(403).json({ message: "Forbidden" });
+
+        await pool.request()
+            .input("LessonId", sql.Int, id)
+            .input("SharedWithUsername", sql.NVarChar(255), decodeURIComponent(username))
+            .query("DELETE FROM LessonShares WHERE LessonId = @LessonId AND SharedWithUsername = @SharedWithUsername");
+        res.json({ message: "Đã bỏ chia sẻ" });
+    } catch (e) {
+        res.status(500).json({ message: "Failed" });
     }
 });
 

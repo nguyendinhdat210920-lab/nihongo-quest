@@ -1,6 +1,6 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X } from 'lucide-react';
+import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X, Users } from 'lucide-react';
 import axios from 'axios';
 import { currentUser } from '@/lib/mockData';
 import { apiUrl } from '@/lib/api';
@@ -54,6 +54,9 @@ export default function QuizPage() {
 
   const [editingQuizId, setEditingQuizId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [sharedWith, setSharedWith] = useState<string[]>([]);
+  const [shareUsername, setShareUsername] = useState("");
+  const [shareError, setShareError] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formQuestions, setFormQuestions] = useState<QuizFormQuestion[]>([
@@ -95,6 +98,9 @@ export default function QuizPage() {
     setShowForm(false);
     setFormTitle("");
     setFormDescription("");
+    setSharedWith([]);
+    setShareUsername("");
+    setShareError(null);
     setFormQuestions([
       {
         id: 1,
@@ -355,6 +361,7 @@ export default function QuizPage() {
                       setError(null);
                       const res = await axios.get<{ quiz: QuizSummary; questions: QuizQuestion[] }>(
                         apiUrl(`/api/quizzes/${quiz.id}`),
+                        { headers: { "x-user": encodeURIComponent(activeUser) } },
                       );
                       setActiveQuiz(res.data.quiz.id);
                       setQuestions(res.data.questions);
@@ -408,6 +415,14 @@ export default function QuizPage() {
                             correctOption: q.correctOption,
                           }));
                         setFormQuestions(mappedQuestions.length ? mappedQuestions : formQuestions);
+                        try {
+                          const sharesRes = await axios.get<{ sharedWith: string[] }>(apiUrl(`/api/quizzes/${quiz.id}/shares`), {
+                            headers: { "x-user": encodeURIComponent(activeUser) },
+                          });
+                          setSharedWith(sharesRes.data?.sharedWith ?? []);
+                        } catch {
+                          setSharedWith([]);
+                        }
                       } catch (err) {
                         console.error("Failed to load quiz for editing", err);
                         setError("Không thể tải quiz để chỉnh sửa.");
@@ -501,6 +516,58 @@ export default function QuizPage() {
                     placeholder="Mô tả ngắn về quiz..."
                   />
                 </div>
+
+                {editingQuizId && (
+                  <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+                    <label className="text-xs font-medium flex items-center gap-1"><Users size={14} /> Chia sẻ với học viên</label>
+                    <p className="text-xs text-muted-foreground">Thêm username để chỉ họ mới thấy quiz này (quiz sẽ thành riêng tư)</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={shareUsername}
+                        onChange={(e) => { setShareUsername(e.target.value); setShareError(null); }}
+                        placeholder="Username học viên..."
+                        className="flex-1 px-2 py-1.5 rounded border text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!shareUsername.trim()) return;
+                          try {
+                            setShareError(null);
+                            await axios.post(apiUrl(`/api/quizzes/${editingQuizId}/share`), { username: shareUsername.trim() }, {
+                              headers: { "x-user": encodeURIComponent(activeUser) },
+                            });
+                            setSharedWith(prev => [...prev, shareUsername.trim()]);
+                            setShareUsername("");
+                          } catch (err: unknown) {
+                            setShareError(axios.isAxiosError(err) && err.response?.data?.message ? err.response.data.message : "Không thể chia sẻ");
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm"
+                      >
+                        Thêm
+                      </button>
+                    </div>
+                    {shareError && <p className="text-xs text-destructive">{shareError}</p>}
+                    {sharedWith.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {sharedWith.map(u => (
+                          <span key={u} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-xs">
+                            {u}
+                            <button type="button" onClick={async () => {
+                              try {
+                                await axios.delete(apiUrl(`/api/quizzes/${editingQuizId}/share/${encodeURIComponent(u)}`), {
+                                  headers: { "x-user": encodeURIComponent(activeUser) },
+                                });
+                                setSharedWith(prev => prev.filter(x => x !== u));
+                              } catch {}
+                            }} className="hover:text-destructive"><X size={12} /></button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-3 max-h-[46vh] overflow-y-auto pr-1">
                   {formQuestions.map((q, idx) => (

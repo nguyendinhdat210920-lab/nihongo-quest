@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS lessons (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 2b. Lesson shares (giáo viên chia sẻ bài học với học viên)
+CREATE TABLE IF NOT EXISTS lesson_shares (
+  lesson_id INT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  shared_with_username VARCHAR(255) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (lesson_id, shared_with_username)
+);
+CREATE INDEX IF NOT EXISTS idx_lesson_shares_username ON lesson_shares(shared_with_username);
+
 -- 3. Materials
 CREATE TABLE IF NOT EXISTS materials (
   id SERIAL PRIMARY KEY,
@@ -47,6 +56,15 @@ CREATE TABLE IF NOT EXISTS quizzes (
   question_count INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 4b. Quiz shares (giáo viên chia sẻ quiz với học viên)
+CREATE TABLE IF NOT EXISTS quiz_shares (
+  quiz_id INT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+  shared_with_username VARCHAR(255) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (quiz_id, shared_with_username)
+);
+CREATE INDEX IF NOT EXISTS idx_quiz_shares_username ON quiz_shares(shared_with_username);
 
 -- 5. QuizQuestions
 CREATE TABLE IF NOT EXISTS quiz_questions (

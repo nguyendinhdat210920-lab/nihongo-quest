@@ -29,6 +29,8 @@ postgresql://postgres.fliybguqwcftsxakxhde:[PASSWORD]@aws-1-ap-south-1.pooler.su
 
 **Lưu ý:** Mật khẩu có ký tự đặc biệt cần encode: `@` → `%40`, `$` → `%24`
 
+**Chia sẻ bài học & quiz:** Chạy `server/sql/lesson-shares.sql` và `server/sql/quiz-shares.sql` trong Supabase SQL Editor (nếu bảng chưa có).
+
 ---
 
 ## Reset mật khẩu qua API (không cần SQL)

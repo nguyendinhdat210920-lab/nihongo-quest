@@ -19,6 +19,7 @@ import {
   Globe,
   ChevronLeft,
   ChevronRight,
+  Users,
 } from "lucide-react";
 import { currentUser } from "@/lib/mockData";
 import { speakText } from "@/lib/speakText";
@@ -82,6 +83,9 @@ export default function Lessons() {
   const [editContent, setEditContent] = useState("");
   const [editFile, setEditFile] = useState<File | null>(null);
   const [editIsPublic, setEditIsPublic] = useState(true);
+  const [sharedWith, setSharedWith] = useState<string[]>([]);
+  const [shareUsername, setShareUsername] = useState("");
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
 
@@ -351,6 +355,56 @@ export default function Lessons() {
                           <Lock size={16} /> Chỉ mình tôi
                         </button>
                       </div>
+                      {!editIsPublic && (
+                        <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+                          <label className="text-xs font-medium flex items-center gap-1"><Users size={14} /> Chia sẻ với học viên</label>
+                          <div className="flex gap-2">
+                            <input
+                              value={shareUsername}
+                              onChange={e => { setShareUsername(e.target.value); setShareError(null); }}
+                              placeholder="Username học viên..."
+                              className="flex-1 px-2 py-1.5 rounded border text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!shareUsername.trim()) return;
+                                try {
+                                  setShareError(null);
+                                  await axios.post(apiUrl(`/api/lessons/${lesson.Id}/share`), { username: shareUsername.trim() }, {
+                                    headers: { "x-user": encodeURIComponent(activeUser) },
+                                  });
+                                  setSharedWith(prev => [...prev, shareUsername.trim()]);
+                                  setShareUsername("");
+                                } catch (err: unknown) {
+                                  setShareError(axios.isAxiosError(err) && err.response?.data?.message ? err.response.data.message : "Không thể chia sẻ");
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded bg-primary text-white text-sm"
+                            >
+                              Thêm
+                            </button>
+                          </div>
+                          {shareError && <p className="text-xs text-destructive">{shareError}</p>}
+                          {sharedWith.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {sharedWith.map(u => (
+                                <span key={u} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-xs">
+                                  {u}
+                                  <button type="button" onClick={async () => {
+                                    try {
+                                      await axios.delete(apiUrl(`/api/lessons/${lesson.Id}/share/${encodeURIComponent(u)}`), {
+                                        headers: { "x-user": encodeURIComponent(activeUser) },
+                                      });
+                                      setSharedWith(prev => prev.filter(x => x !== u));
+                                    } catch {}
+                                  }} className="hover:text-destructive"><X size={12} /></button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <input type="file" onChange={e => setEditFile(e.target.files?.[0] || null)} />
                       <div className="flex gap-2">
                         <button onClick={() => handleUpdate(lesson.Id)} className="bg-green-600 text-white px-4 py-1 rounded flex items-center gap-1"><Save size={16}/> Lưu</button>
@@ -385,12 +439,21 @@ export default function Lessons() {
                           {lesson.CreatedBy === activeUser && (
                             <div className="flex items-center gap-1 ml-1" onClick={(e) => e.stopPropagation()}>
                               <button
-                                onClick={() => {
+                                onClick={async () => {
                                   setEditingId(lesson.Id);
                                   setEditTitle(lesson.Title);
                                   setEditContent(lesson.Content);
                                   setEditFile(null);
                                   setEditIsPublic(isLessonPublic(lesson));
+                                  setShareError(null);
+                                  try {
+                                    const r = await axios.get<{ sharedWith: string[] }>(apiUrl(`/api/lessons/${lesson.Id}/shares`), {
+                                      headers: { "x-user": encodeURIComponent(activeUser) },
+                                    });
+                                    setSharedWith(r.data?.sharedWith ?? []);
+                                  } catch {
+                                    setSharedWith([]);
+                                  }
                                 }}
                                 className="p-2 hover:bg-muted rounded-full"
                                 aria-label="Sửa"
