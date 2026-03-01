@@ -156,7 +156,9 @@ export default function QuizPage() {
 
     if (currentQ + 1 >= questions.length) {
       playComplete();
-      const scoreNow = answers.filter(a => a.ans === a.correct).length;
+      // Bao gồm câu hiện tại (selected) vì setState chưa kịp cập nhật answers
+      const currentCorrect = selected === questions[currentQ].correctOption ? 1 : 0;
+      const scoreNow = answers.filter(a => a.ans === a.correct).length + currentCorrect;
       try {
         setSaveResultError(null);
         const activeUser = localStorage.getItem("username") || currentUser.username;
