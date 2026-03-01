@@ -430,10 +430,12 @@ export default function QuizPage() {
                   <Play size={14} /> Làm quiz
                 </button>
               </div>
-              {quiz.bestPercent !== undefined && quiz.attempts !== undefined && (
+              {quiz.attempts !== undefined && quiz.attempts > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Đã làm {quiz.attempts} lần • Tốt nhất: {quiz.bestScore}/{quiz.bestTotalQuestions} ({quiz.bestPercent}
-                  %)
+                  Đã làm {quiz.attempts} lần
+                  {quiz.bestTotalQuestions != null && quiz.bestTotalQuestions > 0 && (
+                    <> • Làm được: {quiz.bestPercent ?? 0}% ({quiz.bestScore ?? 0}/{quiz.bestTotalQuestions} câu)</>
+                  )}
                 </p>
               )}
 
