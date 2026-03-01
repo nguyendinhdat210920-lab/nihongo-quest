@@ -31,6 +31,8 @@ postgresql://postgres.fliybguqwcftsxakxhde:[PASSWORD]@aws-1-ap-south-1.pooler.su
 
 **Chia sẻ bài học & quiz (link):** Chạy `server/sql/share-links.sql` trong Supabase SQL Editor (nếu bảng chưa có).
 
+**Sửa cột quiz_results (nếu có `total_question` thay vì `total_questions`):** Chạy `server/sql/fix-quiz-results-column.sql`.
+
 ---
 
 ## Reset mật khẩu qua API (không cần SQL)
