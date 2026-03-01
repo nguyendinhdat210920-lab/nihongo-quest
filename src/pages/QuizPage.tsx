@@ -73,23 +73,23 @@ export default function QuizPage() {
 
   const activeUser = localStorage.getItem("username") || currentUser.username;
 
-  useEffect(() => {
-    const fetchQuizzes = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await axios.get<QuizSummary[]>(apiUrl('/api/quizzes'), {
-          params: { username: activeUser },
-        });
-        setQuizzes(res.data);
-      } catch (err) {
-        console.error('Failed to fetch quizzes', err);
-        setError('Không thể tải danh sách quiz.');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchQuizzes = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await axios.get<QuizSummary[]>(apiUrl('/api/quizzes'), {
+        params: { username: activeUser },
+      });
+      setQuizzes(res.data);
+    } catch (err) {
+      console.error('Failed to fetch quizzes', err);
+      setError('Không thể tải danh sách quiz.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchQuizzes();
   }, []);
 
@@ -177,6 +177,7 @@ export default function QuizPage() {
           totalQuestions: questions.length,
         });
         toast.success(`Đã lưu: ${scoreNow}/${questions.length}`);
+        fetchQuizzes();
       } catch (err) {
         console.error('Failed to save quiz result', err);
         setSaveResultError("Không lưu được kết quả. Điểm vẫn hiển thị.");
@@ -285,7 +286,13 @@ export default function QuizPage() {
               </div>
             ))}
           </div>
-          <button onClick={resetQuiz} className="gradient-bg text-primary-foreground px-6 py-2.5 rounded-xl font-medium flex items-center gap-2 mx-auto hover:opacity-90 transition-opacity">
+          <button
+            onClick={() => {
+              resetQuiz();
+              fetchQuizzes();
+            }}
+            className="gradient-bg text-primary-foreground px-6 py-2.5 rounded-xl font-medium flex items-center gap-2 mx-auto hover:opacity-90 transition-opacity"
+          >
             <RotateCcw size={16} /> Làm quiz khác
           </button>
         </motion.div>
