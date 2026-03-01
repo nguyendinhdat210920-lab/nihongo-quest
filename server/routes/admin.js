@@ -208,7 +208,8 @@ router.patch("/users/:id/ban", requireAdmin, async (req, res) => {
     await pool
       .request()
       .input("Id", sql.Int, Number(id))
-      .query("UPDATE Users SET IsBanned = 1 WHERE Id = @Id");
+      .input("IsBanned", sql.Bit, true)
+      .query("UPDATE Users SET IsBanned = @IsBanned WHERE Id = @Id");
 
     return res.json({ message: "User banned" });
   } catch (error) {
@@ -227,7 +228,8 @@ router.patch("/users/:id/unban", requireAdmin, async (req, res) => {
     await pool
       .request()
       .input("Id", sql.Int, Number(id))
-      .query("UPDATE Users SET IsBanned = 0 WHERE Id = @Id");
+      .input("IsBanned", sql.Bit, false)
+      .query("UPDATE Users SET IsBanned = @IsBanned WHERE Id = @Id");
 
     return res.json({ message: "User unbanned" });
   } catch (error) {
@@ -248,7 +250,7 @@ router.patch("/users/:id/admin", requireAdmin, async (req, res) => {
       await pool
         .request()
         .input("Id", sql.Int, Number(id))
-        .input("IsAdmin", sql.Bit, isAdmin ? 1 : 0)
+        .input("IsAdmin", sql.Bit, !!isAdmin)
         .query("UPDATE Users SET IsAdmin = @IsAdmin WHERE Id = @Id");
     } catch (e) {
       if (e?.message?.includes("IsAdmin") || e?.message?.includes("Invalid column")) {
