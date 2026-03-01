@@ -48,12 +48,38 @@ router.get("/", async (req, res) => {
       (req.query.username && typeof req.query.username === "string" ? req.query.username : null) ||
       decodeHeaderUser(req.header("x-user"));
     if (progressUsername) {
-      const progressResult = await pool
-        .request()
-        .input("Username", sql.NVarChar(255), progressUsername)
-        .query(
-          "SELECT QuizId, COUNT(*) AS Attempts, MAX(Score) AS BestScore, MAX(TotalQuestions) AS BestTotalQuestions, MAX(CreatedAt) AS LastTakenAt FROM QuizResults WHERE Username = @Username GROUP BY QuizId",
-        );
+      let progressResult;
+      if (process.env.DATABASE_URL) {
+        const client = await pool.connect();
+        try {
+          let rows;
+          try {
+            const r = await client.query(
+              "SELECT quiz_id AS \"QuizId\", COUNT(*)::int AS \"Attempts\", MAX(score)::int AS \"BestScore\", MAX(total_questions)::int AS \"BestTotalQuestions\", MAX(created_at) AS \"LastTakenAt\" FROM quiz_results WHERE username = $1 GROUP BY quiz_id",
+              [progressUsername]
+            );
+            rows = r.rows;
+          } catch (e) {
+            if (e.message && e.message.includes("total_questions") && e.message.includes("does not exist")) {
+              const r = await client.query(
+                "SELECT quiz_id AS \"QuizId\", COUNT(*)::int AS \"Attempts\", MAX(score)::int AS \"BestScore\", MAX(total_question)::int AS \"BestTotalQuestions\", MAX(created_at) AS \"LastTakenAt\" FROM quiz_results WHERE username = $1 GROUP BY quiz_id",
+                [progressUsername]
+              );
+              rows = r.rows;
+            } else throw e;
+          }
+          progressResult = { recordset: rows };
+        } finally {
+          client.release();
+        }
+      } else {
+        progressResult = await pool
+          .request()
+          .input("Username", sql.NVarChar(255), progressUsername)
+          .query(
+            "SELECT QuizId, COUNT(*) AS Attempts, MAX(Score) AS BestScore, MAX(TotalQuestions) AS BestTotalQuestions, MAX(CreatedAt) AS LastTakenAt FROM QuizResults WHERE Username = @Username GROUP BY QuizId",
+          );
+      }
 
       const progressByQuizId = new Map();
       for (const row of progressResult.recordset || []) {
