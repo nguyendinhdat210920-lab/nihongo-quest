@@ -130,28 +130,29 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// POST /api/auth/force-reset - reset mật khẩu bằng secret (chỉ dùng khi cần, xóa sau)
-// Body: { username, newPassword, secret } - secret = process.env.RESET_SECRET
-router.post("/force-reset", async (req, res) => {
+// POST /api/auth/admin-reset - reset mật khẩu qua API (cần ADMIN_RESET_SECRET)
+router.post("/admin-reset", async (req, res) => {
   const { username, newPassword, secret } = req.body;
-  const expected = process.env.RESET_SECRET;
+  const expected = process.env.ADMIN_RESET_SECRET;
   if (!expected || secret !== expected) {
-    return res.status(403).json({ message: "Invalid" });
+    return res.status(403).json({ message: "Không có quyền" });
   }
   if (!username || !newPassword || newPassword.length < 6) {
-    return res.status(400).json({ message: "username và newPassword (≥6 ký tự) là bắt buộc" });
+    return res.status(400).json({ message: "Cần username và mật khẩu mới (≥6 ký tự)" });
   }
   try {
     await poolConnect;
     const hash = hashPassword(newPassword);
     await pool
       .request()
-      .input("Username", sql.NVarChar(50), username)
+      .input("Username", sql.NVarChar(50), username.trim())
       .input("PasswordHash", sql.NVarChar(255), hash)
-      .query("UPDATE Users SET PasswordHash = @PasswordHash WHERE Username = @Username");
-    return res.json({ message: "Đã đổi mật khẩu. Đăng nhập với mật khẩu mới." });
+      .query(
+        "UPDATE Users SET PasswordHash = @PasswordHash, IsAdmin = true WHERE Username = @Username"
+      );
+    return res.json({ message: "Đã đặt lại mật khẩu. Đăng nhập với mật khẩu mới." });
   } catch (e) {
-    console.error("force-reset error:", e);
+    console.error("admin-reset error:", e);
     return res.status(500).json({ message: e?.message || "Lỗi" });
   }
 });
