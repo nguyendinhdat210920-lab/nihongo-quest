@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, useRef, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X, Share2 } from 'lucide-react';
 import axios from 'axios';
@@ -48,6 +48,7 @@ export default function QuizPage() {
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [answers, setAnswers] = useState<{ q: number; ans: string; correct: string }[]>([]);
+  const lastAnswerRef = useRef<{ ans: string; correct: string } | null>(null);
   const [finished, setFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,8 +144,9 @@ export default function QuizPage() {
 
   const handleAnswer = (option: string) => {
     if (selected) return;
-    setSelected(option);
     const q = questions[currentQ];
+    lastAnswerRef.current = { ans: option, correct: q.correctOption };
+    setSelected(option);
     const isCorrect = option === q.correctOption;
     if (isCorrect) playCorrect();
     else playWrong();
@@ -156,14 +158,16 @@ export default function QuizPage() {
 
     if (currentQ + 1 >= questions.length) {
       playComplete();
-      // Tính điểm: câu 0..currentQ-1 từ answers, câu currentQ từ selected (tránh timing)
       const norm = (s: string) => String(s ?? "").trim().toUpperCase();
       let scoreNow = 0;
       for (let i = 0; i < currentQ; i++) {
         const a = answers[i];
         if (a && norm(a.ans) === norm(a.correct)) scoreNow++;
       }
-      if (selected && norm(selected) === norm(questions[currentQ].correctOption)) scoreNow++;
+      // Dùng ref để chắc chắn có câu trả lời cuối (tránh React batching)
+      const last = lastAnswerRef.current;
+      if (last && norm(last.ans) === norm(last.correct)) scoreNow++;
+      lastAnswerRef.current = null;
       try {
         setSaveResultError(null);
         const activeUser = localStorage.getItem("username") || currentUser.username;
@@ -172,9 +176,11 @@ export default function QuizPage() {
           score: scoreNow,
           totalQuestions: questions.length,
         });
+        toast.success(`Đã lưu: ${scoreNow}/${questions.length}`);
       } catch (err) {
         console.error('Failed to save quiz result', err);
         setSaveResultError("Không lưu được kết quả. Điểm vẫn hiển thị.");
+        toast.error("Không lưu được kết quả");
       }
       setFinished(true);
     } else {
@@ -191,6 +197,7 @@ export default function QuizPage() {
     setAnswers([]);
     setFinished(false);
     setSaveResultError(null);
+    lastAnswerRef.current = null;
   };
 
   const score = answers.filter(a => a.ans === a.correct).length;
