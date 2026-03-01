@@ -36,6 +36,8 @@ const TABLE_MAP = {
   PasswordResetTokens: "password_reset_tokens",
   LessonShares: "lesson_shares",
   QuizShares: "quiz_shares",
+  LessonShareTokens: "lesson_share_tokens",
+  QuizShareTokens: "quiz_share_tokens",
 };
 
 const pgSql = (sql) => {

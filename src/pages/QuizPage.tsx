@@ -1,6 +1,6 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X, Users } from 'lucide-react';
+import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X, Share2 } from 'lucide-react';
 import axios from 'axios';
 import { currentUser } from '@/lib/mockData';
 import { apiUrl } from '@/lib/api';
@@ -54,9 +54,7 @@ export default function QuizPage() {
 
   const [editingQuizId, setEditingQuizId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [sharedWith, setSharedWith] = useState<string[]>([]);
-  const [shareUsername, setShareUsername] = useState("");
-  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareLinkModal, setShareLinkModal] = useState<{ id: number; url: string } | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formQuestions, setFormQuestions] = useState<QuizFormQuestion[]>([
@@ -93,14 +91,42 @@ export default function QuizPage() {
     fetchQuizzes();
   }, []);
 
+  // Xử lý link chia sẻ: ?share=123&token=abc
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shareId = params.get("share");
+    const token = params.get("token");
+    if (!shareId || !token) return;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await axios.get<{ quiz: QuizSummary; questions: QuizQuestion[] }>(
+          apiUrl(`/api/quizzes/${shareId}`),
+          { params: { token } },
+        );
+        if (res.data?.quiz && res.data?.questions?.length) {
+          setActiveQuiz(res.data.quiz.id);
+          setQuestions(res.data.questions);
+          setCurrentQ(0);
+          setSelected(null);
+          setAnswers([]);
+          setFinished(false);
+          window.history.replaceState({}, "", "/quiz");
+        }
+      } catch (err) {
+        setError("Không thể tải quiz từ link chia sẻ.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const resetForm = () => {
     setEditingQuizId(null);
     setShowForm(false);
     setFormTitle("");
     setFormDescription("");
-    setSharedWith([]);
-    setShareUsername("");
-    setShareError(null);
     setFormQuestions([
       {
         id: 1,
@@ -392,6 +418,22 @@ export default function QuizPage() {
                 <div className="absolute top-3 right-3 flex gap-2 text-xs">
                   <button
                     type="button"
+                    className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const r = await axios.get<{ url: string }>(apiUrl(`/api/quizzes/${quiz.id}/share-link`), {
+                          headers: { "x-user": encodeURIComponent(activeUser) },
+                        });
+                        setShareLinkModal({ id: quiz.id, url: r.data?.url || "" });
+                      } catch {}
+                    }}
+                    title="Chia sẻ"
+                  >
+                    <Share2 size={14} /> Chia sẻ
+                  </button>
+                  <button
+                    type="button"
                     className="text-muted-foreground hover:text-foreground"
                     onClick={async () => {
                       try {
@@ -399,6 +441,7 @@ export default function QuizPage() {
                         setError(null);
                         const res = await axios.get<{ quiz: QuizSummary; questions: QuizQuestion[] }>(
                           apiUrl(`/api/quizzes/${quiz.id}`),
+                          { headers: { "x-user": encodeURIComponent(activeUser) } },
                         );
                         setEditingQuizId(res.data.quiz.id);
                         setShowForm(true);
@@ -415,14 +458,6 @@ export default function QuizPage() {
                             correctOption: q.correctOption,
                           }));
                         setFormQuestions(mappedQuestions.length ? mappedQuestions : formQuestions);
-                        try {
-                          const sharesRes = await axios.get<{ sharedWith: string[] }>(apiUrl(`/api/quizzes/${quiz.id}/shares`), {
-                            headers: { "x-user": encodeURIComponent(activeUser) },
-                          });
-                          setSharedWith(sharesRes.data?.sharedWith ?? []);
-                        } catch {
-                          setSharedWith([]);
-                        }
                       } catch (err) {
                         console.error("Failed to load quiz for editing", err);
                         setError("Không thể tải quiz để chỉnh sửa.");
@@ -516,58 +551,6 @@ export default function QuizPage() {
                     placeholder="Mô tả ngắn về quiz..."
                   />
                 </div>
-
-                {editingQuizId && (
-                  <div className="space-y-2 p-3 rounded-lg bg-muted/50">
-                    <label className="text-xs font-medium flex items-center gap-1"><Users size={14} /> Chia sẻ với học viên</label>
-                    <p className="text-xs text-muted-foreground">Thêm username để chỉ họ mới thấy quiz này (quiz sẽ thành riêng tư)</p>
-                    <div className="flex gap-2">
-                      <input
-                        value={shareUsername}
-                        onChange={(e) => { setShareUsername(e.target.value); setShareError(null); }}
-                        placeholder="Username học viên..."
-                        className="flex-1 px-2 py-1.5 rounded border text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!shareUsername.trim()) return;
-                          try {
-                            setShareError(null);
-                            await axios.post(apiUrl(`/api/quizzes/${editingQuizId}/share`), { username: shareUsername.trim() }, {
-                              headers: { "x-user": encodeURIComponent(activeUser) },
-                            });
-                            setSharedWith(prev => [...prev, shareUsername.trim()]);
-                            setShareUsername("");
-                          } catch (err: unknown) {
-                            setShareError(axios.isAxiosError(err) && err.response?.data?.message ? err.response.data.message : "Không thể chia sẻ");
-                          }
-                        }}
-                        className="px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm"
-                      >
-                        Thêm
-                      </button>
-                    </div>
-                    {shareError && <p className="text-xs text-destructive">{shareError}</p>}
-                    {sharedWith.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {sharedWith.map(u => (
-                          <span key={u} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-xs">
-                            {u}
-                            <button type="button" onClick={async () => {
-                              try {
-                                await axios.delete(apiUrl(`/api/quizzes/${editingQuizId}/share/${encodeURIComponent(u)}`), {
-                                  headers: { "x-user": encodeURIComponent(activeUser) },
-                                });
-                                setSharedWith(prev => prev.filter(x => x !== u));
-                              } catch {}
-                            }} className="hover:text-destructive"><X size={12} /></button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <div className="space-y-3 max-h-[46vh] overflow-y-auto pr-1">
                   {formQuestions.map((q, idx) => (
@@ -700,6 +683,57 @@ export default function QuizPage() {
                 </div>
                   </form>
                 </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal chia sẻ link */}
+        <AnimatePresence>
+          {shareLinkModal && (
+            <motion.div
+              className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShareLinkModal(null)}
+            >
+              <motion.div
+                className="glass-card p-6 border rounded-xl max-w-md w-full"
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                  <Share2 size={18} /> Chia sẻ
+                </h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Gửi link này cho học viên để họ làm quiz.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={shareLinkModal.url}
+                    className="flex-1 px-3 py-2 rounded-lg border bg-muted/50 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(shareLinkModal!.url);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShareLinkModal(null)}
+                  className="mt-4 w-full py-2 rounded-lg border text-sm"
+                >
+                  Đóng
+                </button>
               </motion.div>
             </motion.div>
           )}

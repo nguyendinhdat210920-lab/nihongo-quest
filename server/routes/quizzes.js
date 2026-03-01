@@ -24,40 +24,15 @@ const decodeMaybe = (value) => {
 };
 
 // GET /api/quizzes - list all quizzes (with optional progress for a user)
-// Khi có username: hiện quiz public (không share) HOẶC do mình tạo HOẶC được share với mình
 router.get("/", async (req, res) => {
   try {
     await poolConnect;
 
-    const username = req.query.username && typeof req.query.username === "string" ? req.query.username : null;
-    let result;
-
-    try {
-      if (username) {
-        const req = pool.request().input("Username", sql.NVarChar(255), username);
-        result = await req.query(`
-          SELECT DISTINCT q.Id, q.Title, q.Description, q.CreatorName, q.QuestionCount, q.CreatedAt
-          FROM Quizzes q
-          LEFT JOIN QuizShares s ON q.Id = s.QuizId
-          WHERE s.QuizId IS NULL OR q.CreatorName = @Username OR s.SharedWithUsername = @Username
-          ORDER BY q.CreatedAt DESC
-        `);
-      } else {
-        result = await pool.request().query(`
-          SELECT q.Id, q.Title, q.Description, q.CreatorName, q.QuestionCount, q.CreatedAt
-          FROM Quizzes q
-          LEFT JOIN QuizShares s ON q.Id = s.QuizId
-          WHERE s.QuizId IS NULL
-          ORDER BY q.CreatedAt DESC
-        `);
-      }
-    } catch (e) {
-      if (e?.message?.includes("quiz_shares") || e?.message?.includes("does not exist")) {
-        result = await pool.request().query(
-          "SELECT Id, Title, Description, CreatorName, QuestionCount, CreatedAt FROM Quizzes ORDER BY CreatedAt DESC",
-        );
-      } else throw e;
-    }
+    const result = await pool
+      .request()
+      .query(
+        "SELECT Id, Title, Description, CreatorName, QuestionCount, CreatedAt FROM Quizzes ORDER BY CreatedAt DESC",
+      );
 
     const rows = result.recordset || [];
     const mapped = rows.map((row) => ({
@@ -113,6 +88,41 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET /api/quizzes/:id/share-link - lấy link chia sẻ (phải đặt trước GET /:id)
+router.get("/:id/share-link", async (req, res) => {
+  const { id } = req.params;
+  const requester = decodeHeaderUser(req.header("x-user"));
+
+  try {
+    await poolConnect;
+    const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatorName FROM Quizzes WHERE Id = @Id");
+    if (!check.recordset?.length) return res.status(404).json({ message: "Quiz not found" });
+    const owner = decodeMaybe(check.recordset[0].CreatorName);
+    if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới tạo link chia sẻ" });
+
+    const crypto = await import("crypto");
+    const token = crypto.randomBytes(24).toString("hex");
+    const baseUrl = (process.env.SITE_URL || process.env.API_URL || process.env.BASE_URL || (req.protocol + "://" + (req.get("host") || "localhost:5173"))).replace(/\/$/, "").replace(/\/api$/, "");
+
+    try {
+      await pool.request()
+        .input("QuizId", sql.Int, id)
+        .input("Token", sql.NVarChar(64), token)
+        .query("INSERT INTO QuizShareTokens (QuizId, Token) VALUES (@QuizId, @Token) ON CONFLICT (QuizId) DO UPDATE SET Token = @Token");
+    } catch (e) {
+      if (e?.message?.includes("quiz_share_tokens")) {
+        return res.status(400).json({ message: "Chạy server/sql/share-links.sql" });
+      }
+      throw e;
+    }
+
+    const url = `${baseUrl}/quiz?share=${id}&token=${token}`;
+    res.json({ url });
+  } catch (e) {
+    res.status(500).json({ message: "Failed" });
+  }
+});
+
 // GET /api/quizzes/:id - quiz detail with questions
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
@@ -132,18 +142,23 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ message: "Quiz not found" });
     }
 
-    try {
-      const shareCheck = await pool.request().input("QuizId", sql.Int, id).query("SELECT 1 FROM QuizShares WHERE QuizId = @QuizId LIMIT 1");
-      if (shareCheck.recordset?.length) {
-        const creator = decodeMaybe(quizResult.recordset[0].CreatorName);
-        const shared = await pool.request().input("QuizId", sql.Int, id).input("Username", sql.NVarChar(255), requester)
-          .query("SELECT 1 FROM QuizShares WHERE QuizId = @QuizId AND SharedWithUsername = @Username");
-        if (creator !== requester && !shared.recordset?.length) {
-          return res.status(404).json({ message: "Quiz not found" });
+    const token = req.query.token && typeof req.query.token === "string" ? req.query.token : null;
+    const creator = decodeMaybe(quizResult.recordset[0].CreatorName);
+    if (creator !== requester) {
+      try {
+        const hasToken = await pool.request().input("QuizId", sql.Int, id).query("SELECT 1 FROM QuizShareTokens WHERE QuizId = @QuizId LIMIT 1");
+        if (hasToken.recordset?.length) {
+          if (token) {
+            const tok = await pool.request().input("QuizId", sql.Int, id).input("Token", sql.NVarChar(64), token)
+              .query("SELECT 1 FROM QuizShareTokens WHERE QuizId = @QuizId AND Token = @Token");
+            if (!tok.recordset?.length) return res.status(404).json({ message: "Quiz not found" });
+          } else {
+            return res.status(404).json({ message: "Quiz not found" });
+          }
         }
+      } catch {
+        // table may not exist
       }
-    } catch {
-      // QuizShares table may not exist
     }
 
     const q = quizResult.recordset[0];
@@ -380,82 +395,6 @@ router.delete("/:id", async (req, res) => {
   } catch (error) {
     console.error("Error deleting quiz:", error);
     return res.status(500).json({ message: "Failed to delete quiz" });
-  }
-});
-
-// GET /api/quizzes/:id/shares - danh sách người được chia sẻ
-router.get("/:id/shares", async (req, res) => {
-  const { id } = req.params;
-  const requester = decodeHeaderUser(req.header("x-user"));
-
-  try {
-    await poolConnect;
-    const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatorName FROM Quizzes WHERE Id = @Id");
-    if (!check.recordset?.length) return res.status(404).json({ message: "Quiz not found" });
-    const owner = decodeMaybe(check.recordset[0].CreatorName);
-    if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới xem được danh sách chia sẻ" });
-
-    const result = await pool.request().input("QuizId", sql.Int, id)
-      .query("SELECT SharedWithUsername FROM QuizShares WHERE QuizId = @QuizId");
-    const list = (result.recordset || []).map((r) => decodeMaybe(r.SharedWithUsername ?? r.SharedwithUsername) || "").filter(Boolean);
-    res.json({ sharedWith: list });
-  } catch (e) {
-    if (e?.message?.includes("quiz_shares") || e?.message?.includes("does not exist")) {
-      return res.json({ sharedWith: [] });
-    }
-    res.status(500).json({ message: "Failed to fetch shares" });
-  }
-});
-
-// POST /api/quizzes/:id/share - chia sẻ quiz với học viên
-router.post("/:id/share", async (req, res) => {
-  const { id } = req.params;
-  const { username: shareUsername } = req.body;
-  const requester = decodeHeaderUser(req.header("x-user"));
-
-  if (!shareUsername || typeof shareUsername !== "string") {
-    return res.status(400).json({ message: "Cần username người được chia sẻ" });
-  }
-
-  try {
-    await poolConnect;
-    const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatorName FROM Quizzes WHERE Id = @Id");
-    if (!check.recordset?.length) return res.status(404).json({ message: "Quiz not found" });
-    const owner = decodeMaybe(check.recordset[0].CreatorName);
-    if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới chia sẻ được" });
-
-    await pool.request()
-      .input("QuizId", sql.Int, id)
-      .input("SharedWithUsername", sql.NVarChar(255), shareUsername.trim())
-      .query("INSERT INTO QuizShares (QuizId, SharedWithUsername) VALUES (@QuizId, @SharedWithUsername) ON CONFLICT (QuizId, SharedWithUsername) DO NOTHING");
-    res.json({ message: "Đã chia sẻ" });
-  } catch (e) {
-    if (e?.message?.includes("quiz_shares") || e?.message?.includes("does not exist")) {
-      return res.status(400).json({ message: "Chưa có bảng chia sẻ. Chạy server/sql/quiz-shares.sql" });
-    }
-    res.status(500).json({ message: "Không thể chia sẻ" });
-  }
-});
-
-// DELETE /api/quizzes/:id/share/:username - bỏ chia sẻ
-router.delete("/:id/share/:username", async (req, res) => {
-  const { id, username } = req.params;
-  const requester = decodeHeaderUser(req.header("x-user"));
-
-  try {
-    await poolConnect;
-    const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatorName FROM Quizzes WHERE Id = @Id");
-    if (!check.recordset?.length) return res.status(404).json({ message: "Quiz not found" });
-    const owner = decodeMaybe(check.recordset[0].CreatorName);
-    if (owner !== requester) return res.status(403).json({ message: "Forbidden" });
-
-    await pool.request()
-      .input("QuizId", sql.Int, id)
-      .input("SharedWithUsername", sql.NVarChar(255), decodeURIComponent(username))
-      .query("DELETE FROM QuizShares WHERE QuizId = @QuizId AND SharedWithUsername = @SharedWithUsername");
-    res.json({ message: "Đã bỏ chia sẻ" });
-  } catch (e) {
-    res.status(500).json({ message: "Failed" });
   }
 });
 

@@ -122,22 +122,14 @@ router.get("/", async (req, res) => {
 
         if (username) {
             request.input("Username", sql.NVarChar(255), username);
-            query += `WHERE ${publicPredicate} OR CreatedBy = @Username OR Id IN (SELECT LessonId FROM LessonShares WHERE SharedWithUsername = @Username) `;
+            query += `WHERE ${publicPredicate} OR CreatedBy = @Username `;
         } else {
             if (publicPredicate !== "(1 = 1)") query += `WHERE ${publicPredicate} `;
         }
 
         query += "ORDER BY Id DESC";
 
-        let result;
-        try {
-            result = await request.query(query);
-        } catch (e) {
-            if (e?.message?.includes("lesson_shares") || e?.message?.includes("does not exist")) {
-                const fallbackQuery = `SELECT Id, Title, Content, CreatedBy, AttachmentUrl, AttachmentType${hasStatus ? ", Status" : ""}${hasIsPublic ? ", IsPublic" : ""} FROM Lessons WHERE ${publicPredicate}${username ? " OR CreatedBy = @Username" : ""} ORDER BY Id DESC`;
-                result = await request.query(fallbackQuery);
-            } else throw e;
-        }
+        const result = await request.query(query);
         const rows = result.recordset || [];
         const mapped = rows.map((row) => ({
             ...row,
@@ -255,8 +247,8 @@ router.put("/:id", upload.single("file"), async (req, res) => {
     }
 });
 
-// GET: Danh sách người được chia sẻ
-router.get("/:id/shares", async (req, res) => {
+// GET: Lấy link chia sẻ (bấm nút Chia sẻ) - phải đặt trước GET /:id
+router.get("/:id/share-link", async (req, res) => {
     const { id } = req.params;
     const requester = decodeHeaderUser(req.header("x-user"));
 
@@ -265,67 +257,68 @@ router.get("/:id/shares", async (req, res) => {
         const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatedBy FROM Lessons WHERE Id = @Id");
         if (!check.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
         const owner = decodeMaybe(check.recordset[0].CreatedBy);
-        if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới xem được danh sách chia sẻ" });
+        if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới tạo link chia sẻ" });
 
-        const result = await pool.request().input("LessonId", sql.Int, id)
-            .query("SELECT SharedWithUsername FROM LessonShares WHERE LessonId = @LessonId");
-        const list = (result.recordset || []).map((r) => decodeMaybe(r.SharedWithUsername ?? r.SharedwithUsername) || "").filter(Boolean);
-        res.json({ sharedWith: list });
-    } catch (e) {
-        if (e?.message?.includes("lesson_shares") || e?.message?.includes("does not exist")) {
-            return res.json({ sharedWith: [] });
+        const crypto = await import("crypto");
+        const token = crypto.randomBytes(24).toString("hex");
+        const baseUrl = (process.env.SITE_URL || process.env.API_URL || process.env.BASE_URL || (req.protocol + "://" + (req.get("host") || "localhost:5173"))).replace(/\/$/, "").replace(/\/api$/, "");
+
+        try {
+            await pool.request()
+                .input("LessonId", sql.Int, id)
+                .input("Token", sql.NVarChar(64), token)
+                .query("INSERT INTO LessonShareTokens (LessonId, Token) VALUES (@LessonId, @Token) ON CONFLICT (LessonId) DO UPDATE SET Token = @Token");
+        } catch (e) {
+            if (e?.message?.includes("lesson_share_tokens")) {
+                return res.status(400).json({ message: "Chạy server/sql/share-links.sql" });
+            }
+            throw e;
         }
-        res.status(500).json({ message: "Failed to fetch shares" });
+
+        const url = `${baseUrl}/lessons?share=${id}&token=${token}`;
+        res.json({ url });
+    } catch (e) {
+        res.status(500).json({ message: "Failed" });
     }
 });
 
-// POST: Chia sẻ bài học với học viên
-router.post("/:id/share", async (req, res) => {
+// GET: Lấy 1 bài học (cho link chia sẻ hoặc xem chi tiết)
+router.get("/:id", async (req, res) => {
     const { id } = req.params;
-    const { username: shareUsername } = req.body;
-    const requester = decodeHeaderUser(req.header("x-user"));
-
-    if (!shareUsername || typeof shareUsername !== "string") {
-        return res.status(400).json({ message: "Cần username người được chia sẻ" });
-    }
+    const token = req.query.token && typeof req.query.token === "string" ? req.query.token : null;
 
     try {
         await poolConnect;
-        const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatedBy FROM Lessons WHERE Id = @Id");
-        if (!check.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
-        const owner = decodeMaybe(check.recordset[0].CreatedBy);
-        if (owner !== requester) return res.status(403).json({ message: "Chỉ tác giả mới chia sẻ được" });
+        const hasStatus = await hasLessonsStatusColumn();
+        const hasIsPublic = await hasLessonsIsPublicColumn();
+        let query = "SELECT Id, Title, Content, CreatedBy, AttachmentUrl, AttachmentType";
+        if (hasStatus) query += ", Status";
+        if (hasIsPublic) query += ", IsPublic";
+        query += " FROM Lessons WHERE Id = @Id";
 
-        await pool.request()
-            .input("LessonId", sql.Int, id)
-            .input("SharedWithUsername", sql.NVarChar(255), shareUsername.trim())
-            .query("INSERT INTO LessonShares (LessonId, SharedWithUsername) VALUES (@LessonId, @SharedWithUsername) ON CONFLICT (LessonId, SharedWithUsername) DO NOTHING");
-        res.json({ message: "Đã chia sẻ" });
-    } catch (e) {
-        if (e?.message?.includes("lesson_shares") || e?.message?.includes("does not exist")) {
-            return res.status(400).json({ message: "Chưa có bảng chia sẻ. Chạy server/sql/lesson-shares.sql" });
+        const result = await pool.request().input("Id", sql.Int, id).query(query);
+        if (!result.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
+
+        const row = result.recordset[0];
+        const isPublic = hasIsPublic ? !!row.IsPublic : true;
+        const creator = decodeMaybe(row.CreatedBy);
+        const requester = decodeHeaderUser(req.header("x-user"));
+
+        if (!isPublic && creator !== requester) {
+            if (token) {
+                try {
+                    const tok = await pool.request().input("LessonId", sql.Int, id).input("Token", sql.NVarChar(64), token)
+                        .query("SELECT 1 FROM LessonShareTokens WHERE LessonId = @LessonId AND Token = @Token");
+                    if (!tok.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
+                } catch {
+                    return res.status(404).json({ message: "Lesson not found" });
+                }
+            } else {
+                return res.status(404).json({ message: "Lesson not found" });
+            }
         }
-        res.status(500).json({ message: "Không thể chia sẻ" });
-    }
-});
 
-// DELETE: Bỏ chia sẻ
-router.delete("/:id/share/:username", async (req, res) => {
-    const { id, username } = req.params;
-    const requester = decodeHeaderUser(req.header("x-user"));
-
-    try {
-        await poolConnect;
-        const check = await pool.request().input("Id", sql.Int, id).query("SELECT CreatedBy FROM Lessons WHERE Id = @Id");
-        if (!check.recordset?.length) return res.status(404).json({ message: "Lesson not found" });
-        const owner = decodeMaybe(check.recordset[0].CreatedBy);
-        if (owner !== requester) return res.status(403).json({ message: "Forbidden" });
-
-        await pool.request()
-            .input("LessonId", sql.Int, id)
-            .input("SharedWithUsername", sql.NVarChar(255), decodeURIComponent(username))
-            .query("DELETE FROM LessonShares WHERE LessonId = @LessonId AND SharedWithUsername = @SharedWithUsername");
-        res.json({ message: "Đã bỏ chia sẻ" });
+        res.json({ ...row, CreatedBy: creator });
     } catch (e) {
         res.status(500).json({ message: "Failed" });
     }
