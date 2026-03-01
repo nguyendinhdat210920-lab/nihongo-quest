@@ -74,8 +74,10 @@ router.get("/", async (req, res) => {
         if (p) {
           quiz.attempts = p.attempts;
           quiz.bestScore = p.bestScore;
-          quiz.bestTotalQuestions = p.bestTotalQuestions;
-          quiz.bestPercent = p.bestPercent;
+          // Fallback: nếu total_questions trong DB = 0/NULL thì dùng question_count của quiz
+          const total = p.bestTotalQuestions || quiz.questionCount || 0;
+          quiz.bestTotalQuestions = total;
+          quiz.bestPercent = total > 0 ? Math.round((p.bestScore * 100) / total) : 0;
           quiz.lastTakenAt = p.lastTakenAt;
         }
       }
