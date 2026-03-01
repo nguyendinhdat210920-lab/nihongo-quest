@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X, Share2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import axios from 'axios';
 import { currentUser } from '@/lib/mockData';
 import { apiUrl } from '@/lib/api';
@@ -430,17 +431,23 @@ export default function QuizPage() {
                   <Play size={14} /> Làm quiz
                 </button>
               </div>
-              {quiz.attempts !== undefined && quiz.attempts > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Đã làm {quiz.attempts} lần
-                  {quiz.bestTotalQuestions != null && quiz.bestTotalQuestions > 0 && (
-                    <> • Làm được: {quiz.bestPercent ?? 0}% ({quiz.bestScore ?? 0}/{quiz.bestTotalQuestions} câu)</>
-                  )}
-                </p>
+              {quiz.attempts !== undefined && quiz.attempts > 0 && quiz.bestTotalQuestions != null && quiz.bestTotalQuestions > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  <p className="text-xs text-muted-foreground">
+                    {quiz.bestScore ?? 0}/{quiz.bestTotalQuestions} câu • {quiz.bestPercent ?? 0}%
+                  </p>
+                  <Progress value={Math.min(quiz.bestPercent ?? 0, 100)} className="h-2 bg-muted" />
+                </div>
               )}
 
-              {quiz.creatorName === activeUser && (
-                <div className="absolute top-3 right-3 flex gap-2 text-xs">
+              <div className="absolute top-3 right-3 flex items-center gap-2">
+                {quiz.attempts !== undefined && quiz.attempts > 0 && quiz.bestTotalQuestions != null && quiz.bestTotalQuestions > 0 && (quiz.bestPercent ?? 0) >= 100 && (
+                  <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-700 text-[11px] font-medium">
+                    ĐÃ XONG
+                  </span>
+                )}
+                {quiz.creatorName === activeUser && (
+                <div className="flex gap-2 text-xs">
                   <button
                     type="button"
                     className="text-muted-foreground hover:text-foreground flex items-center gap-1"
@@ -523,7 +530,8 @@ export default function QuizPage() {
                     Xóa
                   </button>
                 </div>
-              )}
+                )}
+              </div>
             </motion.div>
           ))}
         </div>
