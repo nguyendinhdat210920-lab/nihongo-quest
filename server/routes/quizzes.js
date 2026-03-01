@@ -101,11 +101,11 @@ router.get("/", async (req, res) => {
         const p = progressByQuizId.get(quiz.id);
         if (p) {
           quiz.attempts = p.attempts;
-          quiz.bestScore = p.bestScore;
-          // Fallback: nếu total_questions trong DB = 0/NULL thì dùng question_count của quiz
           const total = p.bestTotalQuestions || quiz.questionCount || 0;
           quiz.bestTotalQuestions = total;
-          quiz.bestPercent = total > 0 ? Math.round((p.bestScore * 100) / total) : 0;
+          const score = Math.min(p.bestScore, total);
+          quiz.bestScore = score;
+          quiz.bestPercent = total > 0 ? Math.min(100, Math.round((score * 100) / total)) : 0;
           quiz.lastTakenAt = p.lastTakenAt;
         }
       }

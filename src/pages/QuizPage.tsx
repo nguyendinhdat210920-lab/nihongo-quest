@@ -431,21 +431,31 @@ export default function QuizPage() {
                   <Play size={14} /> Làm quiz
                 </button>
               </div>
-              {quiz.attempts !== undefined && quiz.attempts > 0 && quiz.bestTotalQuestions != null && quiz.bestTotalQuestions > 0 && (
-                <div className="mt-3 space-y-1.5">
-                  <p className="text-xs text-muted-foreground">
-                    {quiz.bestScore ?? 0}/{quiz.bestTotalQuestions} câu • {quiz.bestPercent ?? 0}%
-                  </p>
-                  <Progress value={Math.min(quiz.bestPercent ?? 0, 100)} className="h-2 bg-muted" />
-                </div>
-              )}
+              {(() => {
+                const total = quiz.bestTotalQuestions ?? quiz.questionCount ?? 0;
+                const score = Math.min(quiz.bestScore ?? 0, total);
+                const pct = total > 0 ? Math.min(100, Math.round((score * 100) / total)) : 0;
+                return quiz.attempts !== undefined && quiz.attempts > 0 && total > 0 ? (
+                  <div className="mt-3 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">
+                      {score}/{total} câu • {pct}%
+                    </p>
+                    <Progress value={pct} className="h-2 bg-muted" />
+                  </div>
+                ) : null;
+              })()}
 
               <div className="absolute top-3 right-3 flex items-center gap-2">
-                {quiz.attempts !== undefined && quiz.attempts > 0 && quiz.bestTotalQuestions != null && quiz.bestTotalQuestions > 0 && (quiz.bestPercent ?? 0) >= 100 && (
+                {(() => {
+                  const total = quiz.bestTotalQuestions ?? quiz.questionCount ?? 0;
+                  const score = Math.min(quiz.bestScore ?? 0, total);
+                  const pct = total > 0 ? Math.min(100, Math.round((score * 100) / total)) : 0;
+                  return quiz.attempts !== undefined && quiz.attempts > 0 && total > 0 && pct >= 100 ? (
                   <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-700 text-[11px] font-medium">
                     ĐÃ XONG
                   </span>
-                )}
+                  ) : null;
+                })()}
                 {quiz.creatorName === activeUser && (
                 <div className="flex gap-2 text-xs">
                   <button
