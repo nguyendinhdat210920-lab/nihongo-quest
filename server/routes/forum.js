@@ -82,7 +82,7 @@ router.get("/posts", async (req, res) => {
     const countResult = await countReq.query(`
       SELECT COUNT(*) AS Total FROM ForumPosts p ${whereClause}
     `);
-    const total = countResult.recordset?.[0]?.Total ?? 0;
+    const total = countResult.recordset?.[0]?.Total ?? countResult.recordset?.[0]?.total ?? 0;
 
     const mainReq = pool.request();
     if (search) mainReq.input("Search", sql.NVarChar(255), `%${search}%`);
@@ -126,8 +126,8 @@ router.get("/posts", async (req, res) => {
       authorName: decodeMaybe(row.AuthorUsername),
       authorIsAdmin: !!row.AuthorIsAdmin,
       status: row.Status || "approved",
-      likes: row.LikeCount ?? 0,
-      commentCount: row.CommentCount ?? 0,
+      likes: row.LikeCount ?? row.Likecount ?? 0,
+      commentCount: row.CommentCount ?? row.Commentcount ?? 0,
       createdAt: row.CreatedAt,
       liked: likedSet.has(row.Id),
       fileUrl: row.FileUrl || null,
@@ -236,8 +236,8 @@ router.get("/posts/pending", async (req, res) => {
       content: row.Content || "",
       authorName: decodeMaybe(row.AuthorUsername),
       status: row.Status || "pending",
-      likes: row.LikeCount ?? 0,
-      commentCount: row.CommentCount ?? 0,
+      likes: row.LikeCount ?? row.Likecount ?? 0,
+      commentCount: row.CommentCount ?? row.Commentcount ?? 0,
       createdAt: row.CreatedAt,
       fileUrl: row.FileUrl || null,
       fileName: row.FileName || null,
@@ -313,8 +313,8 @@ router.get("/posts/:id", async (req, res) => {
       authorName: decodeMaybe(row.AuthorUsername),
       authorIsAdmin: !!row.AuthorIsAdmin,
       status: row.Status || "approved",
-      likes: row.LikeCount ?? 0,
-      commentCount: row.CommentCount ?? 0,
+      likes: row.LikeCount ?? row.Likecount ?? 0,
+      commentCount: row.CommentCount ?? row.Commentcount ?? 0,
       createdAt: row.CreatedAt,
       fileUrl: row.FileUrl || null,
       fileName: row.FileName || null,
@@ -443,7 +443,7 @@ router.post("/posts/:id/like", async (req, res) => {
       .input("PostId", sql.Int, id)
       .query("SELECT COUNT(*) AS Cnt FROM ForumLikes WHERE PostId = @PostId");
 
-    const likes = countResult.recordset[0]?.Cnt ?? 0;
+    const likes = countResult.recordset[0]?.Cnt ?? countResult.recordset[0]?.cnt ?? 0;
     const liked = !existing.recordset?.length;
 
     return res.json({ likes, liked });

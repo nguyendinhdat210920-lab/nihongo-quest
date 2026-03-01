@@ -115,6 +115,7 @@ const poolConnect = pool.query("SELECT 1").then(() => {});
 
 const sql = {
   NVarChar: () => {},
+  NChar: () => {},
   Int: () => {},
   Bit: () => {},
   DateTime2: () => {},
