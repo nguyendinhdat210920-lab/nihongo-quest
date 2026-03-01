@@ -4,6 +4,7 @@ import { HelpCircle, Play, CheckCircle, XCircle, ArrowRight, RotateCcw, X } from
 import axios from 'axios';
 import { currentUser } from '@/lib/mockData';
 import { apiUrl } from '@/lib/api';
+import { playCorrect, playWrong, playComplete } from '@/lib/quizSounds';
 
 interface QuizSummary {
   id: number;
@@ -111,6 +112,9 @@ export default function QuizPage() {
     if (selected) return;
     setSelected(option);
     const q = questions[currentQ];
+    const isCorrect = option === q.correctOption;
+    if (isCorrect) playCorrect();
+    else playWrong();
     setAnswers([...answers, { q: q.id, ans: option, correct: q.correctOption }]);
   };
 
@@ -118,6 +122,7 @@ export default function QuizPage() {
     if (!activeQuiz || !questions.length) return;
 
     if (currentQ + 1 >= questions.length) {
+      playComplete();
       const scoreNow = answers.filter(a => a.ans === a.correct).length;
       try {
         setSaveResultError(null);
