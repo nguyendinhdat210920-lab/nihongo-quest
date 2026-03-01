@@ -15,10 +15,12 @@ import {
   List,
   LayoutGrid,
   Star,
+  Volume2,
 } from "lucide-react";
 import axios from "axios";
 import { currentUser } from "@/lib/mockData";
 import { apiUrl } from "@/lib/api";
+import { speakText } from "@/lib/speakText";
 
 interface Deck {
   id: number;
@@ -377,7 +379,18 @@ export default function Flashcards() {
                   className="glass-card p-4 flex items-start justify-between gap-4"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-jp font-semibold text-lg">{c.front}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-jp font-semibold text-lg">{c.front}</p>
+                      <button
+                        type="button"
+                        onClick={(e) => speakText(c.front, e)}
+                        className="p-1.5 rounded-lg hover:bg-muted transition-colors shrink-0"
+                        title="Nghe phát âm"
+                        aria-label="Nghe phát âm"
+                      >
+                        <Volume2 size={18} />
+                      </button>
+                    </div>
                     <p className="text-muted-foreground text-sm mt-0.5">{c.back}</p>
                     {c.example && (
                       <p className="text-xs text-muted-foreground italic mt-1">"{c.example}"</p>
@@ -516,7 +529,16 @@ export default function Flashcards() {
               >
                 <div className="absolute inset-0 backface-hidden glass-card flex flex-col items-center justify-center p-8">
                   <p className="text-4xl font-jp font-bold mb-2">{card.front}</p>
-                  <p className="text-sm text-muted-foreground">Nhấn để lật thẻ</p>
+                  <button
+                    type="button"
+                    onClick={(e) => speakText(card.front, e)}
+                    className="mt-2 p-2 rounded-full hover:bg-white/20 transition-colors"
+                    title="Nghe phát âm"
+                    aria-label="Nghe phát âm"
+                  >
+                    <Volume2 size={24} />
+                  </button>
+                  <p className="text-sm text-muted-foreground mt-2">Nhấn để lật thẻ</p>
                 </div>
                 <div className="absolute inset-0 backface-hidden rotate-y-180 glass-card flex flex-col items-center justify-center p-8 gradient-accent-bg text-primary-foreground">
                   <p className="text-2xl font-bold mb-3">{card.back}</p>
