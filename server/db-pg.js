@@ -75,8 +75,8 @@ const pgSql = (sql) => {
     .replace(/\bDATEPART\s*\(\s*WEEKDAY\s*,\s*(\w+)\s*\)/gi, "EXTRACT(DOW FROM $1)::int + 1")
     .replace(/\bMONTH\s*\(\s*(\w+)\s*\)/gi, "EXTRACT(MONTH FROM $1)::int")
     .replace(/\bYEAR\s*\(\s*(\w+)\s*\)/gi, "EXTRACT(YEAR FROM $1)::int")
-    .replace(/\bDATEADD\s*\(\s*day\s*,\s*-(\d+)\s*,\s*GETDATE\s*\(\s*\)\s*\)/gi, "(NOW() - INTERVAL '$1 days')")
-    .replace(/\bDATEADD\s*\(\s*month\s*,\s*-(\d+)\s*,\s*GETDATE\s*\(\s*\)\s*\)/gi, "(NOW() - INTERVAL '$1 months')")
+    .replace(/\bDATEADD\s*\(\s*day\s*,\s*-(\d+)\s*,\s*(?:GETDATE\s*\(\s*\)|NOW\s*\(\s*\))\s*\)/gi, "(NOW() - INTERVAL '$1 days')")
+    .replace(/\bDATEADD\s*\(\s*month\s*,\s*-(\d+)\s*,\s*(?:GETDATE\s*\(\s*\)|NOW\s*\(\s*\))\s*\)/gi, "(NOW() - INTERVAL '$1 months')")
     .replace(/\bOFFSET\s+(\d+)\s+ROWS\s+FETCH\s+NEXT\s+(\d+)\s+ROWS\s+ONLY\b/gi, "OFFSET $1 LIMIT $2")
     .replace(/\s+ROWS\s+FETCH\s+NEXT\s+/gi, " LIMIT ")
     .replace(/\s+ROWS\s+ONLY\b/gi, "");
@@ -128,4 +128,5 @@ const sql = {
 
 pool.request = () => new PgRequest();
 
-export { sql, pool, poolConnect };
+const usePostgres = true;
+export { sql, pool, poolConnect, usePostgres };

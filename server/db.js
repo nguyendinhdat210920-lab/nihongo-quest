@@ -7,4 +7,4 @@ const mod = usePostgres
   ? await import("./db-pg.js")
   : await import("./db-mssql.js");
 
-export const { sql, pool, poolConnect } = mod;
+export const { sql, pool, poolConnect, usePostgres } = mod;

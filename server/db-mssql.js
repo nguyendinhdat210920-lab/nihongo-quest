@@ -11,4 +11,5 @@ const config = {
 const pool = new mssql.ConnectionPool(config);
 const poolConnect = pool.connect();
 
-export { sql: mssql, pool, poolConnect };
+const usePostgres = false;
+export { sql: mssql, pool, poolConnect, usePostgres };

@@ -1,5 +1,7 @@
 import express from "express";
-import { sql, pool, poolConnect } from "../db.js";
+import { sql, pool, poolConnect, usePostgres } from "../db.js";
+
+const TZ = "Asia/Ho_Chi_Minh";
 
 const router = express.Router();
 
@@ -55,24 +57,37 @@ router.get("/stats", async (req, res) => {
       totalWords = 0;
     }
 
-    const streakResult = await pool
-      .request()
-      .input("Username", sql.NVarChar(255), username)
-      .query(`
+    let dates = [];
+    let today = new Date().toISOString().slice(0, 10);
+
+    if (usePostgres) {
+      const streakRes = await pool.query(
+        `SELECT (created_at AT TIME ZONE $1)::date AS activity_date FROM quiz_results WHERE username = $2 GROUP BY (created_at AT TIME ZONE $1)::date ORDER BY activity_date DESC`,
+        [TZ, username]
+      );
+      dates = (streakRes.rows || []).map((r) => {
+        const d = r.activity_date;
+        return d instanceof Date ? d.toISOString().slice(0, 10) : String(d || "").slice(0, 10);
+      });
+      today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+    } else {
+      const streakResult = await pool
+        .request()
+        .input("Username", sql.NVarChar(255), username)
+        .query(`
         SELECT CAST(CreatedAt AS DATE) AS ActivityDate
         FROM QuizResults
         WHERE Username = @Username
         GROUP BY CAST(CreatedAt AS DATE)
         ORDER BY ActivityDate DESC
       `);
-
-    const dates = (streakResult.recordset || []).map((r) => {
-      const d = r.Activitydate ?? r.ActivityDate;
-      return d instanceof Date ? d.toISOString().slice(0, 10) : String(d || "").slice(0, 10);
-    });
+      dates = (streakResult.recordset || []).map((r) => {
+        const d = r.Activitydate ?? r.ActivityDate;
+        return d instanceof Date ? d.toISOString().slice(0, 10) : String(d || "").slice(0, 10);
+      });
+    }
 
     let streak = 0;
-    const today = new Date().toISOString().slice(0, 10);
     if (dates.includes(today)) {
       streak = 1;
       for (let i = 1; i < dates.length; i++) {
