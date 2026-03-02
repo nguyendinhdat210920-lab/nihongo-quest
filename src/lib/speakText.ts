@@ -25,7 +25,23 @@ const loadVoices = (cb: () => void) => {
   else synth.addEventListener("voiceschanged", doLoad, { once: true });
 };
 
-/** Speak text - auto-detects Japanese for ja-JP voice */
+/** Lấy phần đọc (trong ngoặc) để TTS chỉ đọc 1 lần. Kanji để dưới, không đọc. */
+export const getReadingForSpeech = (text: string): string => {
+  const m = text.match(/[（(]([^）)]+)[）)]\s*$/);
+  return m ? m[1].trim() : text.replace(/[（(][^）)]*[）)]/g, "").replace(/～/g, "").trim() || text.trim();
+};
+
+/** Tách front thành: reading (chính, đọc) + kanji (phụ, hiển thị dưới) */
+export const parseFrontDisplay = (text: string): { reading: string; kanji: string | null } => {
+  const match = text.match(/(.+?)[（(]([^）)]+)[）)]\s*$/);
+  if (match) {
+    const kanjiRaw = match[1].replace(/[（(][^）)]*[）)]/g, "").replace(/～/g, "").trim();
+    return { reading: match[2].trim(), kanji: kanjiRaw || null };
+  }
+  return { reading: text.trim(), kanji: null };
+};
+
+/** Speak text - chỉ đọc phần reading (hiragana), không đọc kanji */
 export const speakText = (text: string, e?: React.MouseEvent) => {
   e?.stopPropagation();
   if (!text?.trim() || typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -33,10 +49,12 @@ export const speakText = (text: string, e?: React.MouseEvent) => {
   const synth = window.speechSynthesis;
   synth.cancel();
 
+  const toSpeak = getReadingForSpeech(text);
+
   loadVoices(() => {
     const lang = hasJapanese(text) ? "ja-JP" : "en-US";
     const voice = getVoice(lang) ?? getVoice("en") ?? undefined;
-    const utterance = new SpeechSynthesisUtterance(text.trim());
+    const utterance = new SpeechSynthesisUtterance(toSpeak);
     utterance.rate = 0.9;
     utterance.volume = 1;
     if (voice) utterance.voice = voice;

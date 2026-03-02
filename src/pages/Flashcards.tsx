@@ -20,7 +20,7 @@ import {
 import axios from "axios";
 import { currentUser } from "@/lib/mockData";
 import { apiUrl } from "@/lib/api";
-import { speakText } from "@/lib/speakText";
+import { speakText, parseFrontDisplay } from "@/lib/speakText";
 
 interface Deck {
   id: number;
@@ -380,7 +380,15 @@ export default function Flashcards() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="font-jp font-semibold text-lg">{c.front}</p>
+                      {(() => {
+                        const { reading, kanji } = parseFrontDisplay(c.front);
+                        return (
+                          <div>
+                            <p className="font-jp font-semibold text-lg">{reading}</p>
+                            {kanji && <p className="font-jp text-sm text-muted-foreground">Kanji: {kanji}</p>}
+                          </div>
+                        );
+                      })()}
                       <button
                         type="button"
                         onClick={(e) => speakText(c.front, e)}
@@ -528,7 +536,15 @@ export default function Flashcards() {
                 transition={{ duration: 0.6, type: "spring", stiffness: 200 }}
               >
                 <div className="absolute inset-0 backface-hidden glass-card flex flex-col items-center justify-center p-8">
-                  <p className="text-4xl font-jp font-bold mb-2">{card.front}</p>
+                  {(() => {
+                    const { reading, kanji } = parseFrontDisplay(card.front);
+                    return (
+                      <>
+                        <p className="text-4xl font-jp font-bold mb-1">{reading}</p>
+                        {kanji && <p className="text-xl font-jp text-muted-foreground mb-2">Kanji: {kanji}</p>}
+                      </>
+                    );
+                  })()}
                   <button
                     type="button"
                     onClick={(e) => speakText(card.front, e)}
