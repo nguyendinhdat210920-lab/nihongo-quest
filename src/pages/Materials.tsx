@@ -5,6 +5,18 @@ import axios from "axios";
 import { apiUrl } from "@/lib/api";
 import { currentUser } from "@/lib/mockData";
 
+/** Lấy URL file: Supabase dùng trực tiếp, nội bộ dùng API domain hiện tại */
+const getFileViewUrl = (fileUrl: string | null): string => {
+  if (!fileUrl) return "";
+  if (fileUrl.includes("supabase.co/storage")) return fileUrl;
+  try {
+    const pathname = new URL(fileUrl).pathname || fileUrl;
+    return apiUrl(pathname.startsWith("/") ? pathname : `/${pathname}`);
+  } catch {
+    return fileUrl.startsWith("/") ? apiUrl(fileUrl) : apiUrl(`/${fileUrl}`);
+  }
+};
+
 interface MaterialItem {
   id: number;
   title: string;
@@ -188,7 +200,7 @@ export default function Materials() {
                     {m.fileUrl && (
                       <>
                         <a
-                          href={m.fileUrl}
+                          href={getFileViewUrl(m.fileUrl)}
                           target="_blank"
                           rel="noreferrer"
                           className="p-2.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors flex items-center gap-1 text-xs"
@@ -197,7 +209,7 @@ export default function Materials() {
                           Xem
                         </a>
                         <a
-                          href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(m.fileUrl)}`}
+                          href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(getFileViewUrl(m.fileUrl))}`}
                           className="p-2.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors flex items-center gap-1 text-xs"
                         >
                           <Download size={16} />

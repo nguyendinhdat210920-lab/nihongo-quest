@@ -6,6 +6,10 @@ import { sql, pool, poolConnect } from "../db.js";
 
 const router = express.Router();
 
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+const BUCKET = "materials";
+
 const decodeHeaderUser = (value) => {
   if (!value) return "anonymous";
   try {
@@ -113,13 +117,43 @@ router.post("/", upload.single("file"), async (req, res) => {
     let fileType = null;
 
     if (file) {
-      const baseUrl = process.env.API_URL || process.env.BASE_URL || "http://localhost:3000";
-      fileUrl = `${baseUrl.replace(/\/$/, "")}/uploads/materials/${file.filename}`;
       const ext = path.extname(file.originalname).toLowerCase();
       if (ext === ".pdf") fileType = "pdf";
       else if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext))
         fileType = "image";
       else fileType = ext.replace(".", "") || "file";
+
+      if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+        try {
+          const { createClient } = await import("@supabase/supabase-js");
+          const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+          const filePath = file.filename;
+          const buf = fs.readFileSync(file.path);
+          const { data, error } = await supabase.storage.from(BUCKET).upload(filePath, buf, {
+            contentType: file.mimetype,
+            upsert: true,
+          });
+          if (error) throw error;
+          const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(data.path);
+          fileUrl = urlData.publicUrl;
+          try {
+            fs.unlinkSync(file.path);
+          } catch {}
+        } catch (err) {
+          console.error("Supabase upload failed, fallback to local:", err?.message);
+          fileUrl = null;
+        }
+      }
+      if (!fileUrl) {
+        const baseUrl =
+          (req.protocol && req.get("host")
+            ? `${req.protocol}://${req.get("host")}`
+            : null) ||
+          process.env.API_URL ||
+          process.env.BASE_URL ||
+          "http://localhost:3000";
+        fileUrl = `${String(baseUrl).replace(/\/$/, "")}/uploads/materials/${file.filename}`;
+      }
     }
 
     const tagsCsv = Array.isArray(tags)
@@ -194,7 +228,7 @@ router.delete("/:id", async (req, res) => {
         .json({ message: "You are not allowed to delete this material" });
     }
 
-    if (material.FileUrl) {
+    if (material.FileUrl && !material.FileUrl.includes("supabase.co/storage")) {
       const marker = "/uploads/materials/";
       const idx = material.FileUrl.indexOf(marker);
       if (idx !== -1) {

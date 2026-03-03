@@ -48,8 +48,13 @@ const resolveUploadFile = (src) => {
 // GET /api/files/download?src=<fileUrl>
 router.get("/download", async (req, res) => {
   const src = typeof req.query.src === "string" ? req.query.src : "";
-  const filePath = resolveUploadFile(src);
+  if (!src) return res.status(400).json({ message: "Invalid file source" });
 
+  if (src.includes("supabase.co/storage")) {
+    return res.redirect(302, src);
+  }
+
+  const filePath = resolveUploadFile(src);
   if (!filePath) {
     return res.status(400).json({ message: "Invalid file source" });
   }

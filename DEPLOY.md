@@ -89,8 +89,22 @@ git push -u origin main
 
 ---
 
+## Tài liệu không mất khi restart (Supabase Storage)
+
+Để file tài liệu **không mất** khi Render restart/redeploy:
+
+1. Supabase Dashboard → **Storage** → **New bucket** → Tên: `materials` → Bật **Public** → Create
+2. Render → Environment → Thêm:
+   - `SUPABASE_URL` = `https://YOUR_PROJECT.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` = (Settings → API → service_role key)
+3. Redeploy
+
+Chi tiết: `server/sql/supabase-storage-setup.sql`
+
+---
+
 ## Lưu ý
 
 - **Supabase**: Free 500MB, không cần thẻ
-- **File upload**: Render free có filesystem tạm — file upload có thể mất khi redeploy
+- **File upload**: Không dùng Supabase Storage → file mất khi Render redeploy
 - **Cold start**: Render free sleep sau 15 phút — lần đầu truy cập có thể chậm ~30s
