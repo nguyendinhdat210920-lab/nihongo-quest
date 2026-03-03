@@ -63,6 +63,7 @@ export default function Flashcards() {
 
   const [showCardForm, setShowCardForm] = useState(false);
   const [cardFront, setCardFront] = useState("");
+  const [cardKanji, setCardKanji] = useState("");
   const [cardBack, setCardBack] = useState("");
   const [cardExample, setCardExample] = useState("");
 
@@ -72,6 +73,7 @@ export default function Flashcards() {
   const [completedCount, setCompletedCount] = useState(0);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [editFront, setEditFront] = useState("");
+  const [editKanji, setEditKanji] = useState("");
   const [editBack, setEditBack] = useState("");
   const [editExample, setEditExample] = useState("");
 
@@ -221,15 +223,17 @@ export default function Flashcards() {
   const handleAddCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDeck || !cardFront.trim() || !cardBack.trim()) return;
+    const front = cardKanji.trim() ? `${cardKanji.trim()}（${cardFront.trim()}）` : cardFront.trim();
     try {
       setSubmitting(true);
       setError(null);
       await axios.post(
         apiUrl(`/api/flashcards/decks/${selectedDeck.id}/cards`),
-        { front: cardFront.trim(), back: cardBack.trim(), example: cardExample.trim() },
+        { front, back: cardBack.trim(), example: cardExample.trim() },
         { headers: { "x-user": encodeURIComponent(activeUser) } }
       );
       setCardFront("");
+      setCardKanji("");
       setCardBack("");
       setCardExample("");
       setShowCardForm(false);
@@ -259,11 +263,12 @@ export default function Flashcards() {
   const handleUpdateCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCard || !editFront.trim() || !editBack.trim()) return;
+    const front = editKanji.trim() ? `${editKanji.trim()}（${editFront.trim()}）` : editFront.trim();
     try {
       setSubmitting(true);
       await axios.put(
         apiUrl(`/api/flashcards/cards/${editingCard.id}`),
-        { front: editFront.trim(), back: editBack.trim(), example: editExample.trim() },
+        { front, back: editBack.trim(), example: editExample.trim() },
         { headers: { "x-user": encodeURIComponent(activeUser) } }
       );
       setEditingCard(null);
@@ -434,7 +439,9 @@ export default function Flashcards() {
                         <button
                           onClick={() => {
                             setEditingCard(c);
-                            setEditFront(c.front);
+                            const { reading, kanji } = parseFrontDisplay(c.front);
+                            setEditFront(reading);
+                            setEditKanji(kanji || "");
                             setEditBack(c.back);
                             setEditExample(c.example || "");
                           }}
@@ -600,7 +607,9 @@ export default function Flashcards() {
                   <button
                     onClick={() => {
                       setEditingCard(card);
-                      setEditFront(card.front);
+                      const { reading, kanji } = parseFrontDisplay(card.front);
+                      setEditFront(reading);
+                      setEditKanji(kanji || "");
                       setEditBack(card.back);
                       setEditExample(card.example || "");
                     }}
@@ -689,17 +698,25 @@ export default function Flashcards() {
                 </button>
               </div>
               <form onSubmit={handleAddCard} className="space-y-3">
-                <input
-                  value={cardFront}
-                  onChange={(e) => setCardFront(e.target.value)}
-                  placeholder="Mặt trước (ví dụ: 食べる)"
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  required
-                />
+                <div>
+                  <input
+                    value={cardFront}
+                    onChange={(e) => setCardFront(e.target.value)}
+                    placeholder="Cách đọc (hiragana) * ví dụ: こうこう"
+                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                    required
+                  />
+                  <input
+                    value={cardKanji}
+                    onChange={(e) => setCardKanji(e.target.value)}
+                    placeholder="Kanji (tùy chọn) ví dụ: 高校 — hiển thị dưới cách đọc"
+                    className="w-full px-3 py-2 rounded-lg border text-sm mt-2"
+                  />
+                </div>
                 <input
                   value={cardBack}
                   onChange={(e) => setCardBack(e.target.value)}
-                  placeholder="Mặt sau (ví dụ: Ăn)"
+                  placeholder="Mặt sau (nghĩa) * ví dụ: Trường THPT"
                   className="w-full px-3 py-2 rounded-lg border text-sm"
                   required
                 />
@@ -742,17 +759,25 @@ export default function Flashcards() {
                 </button>
               </div>
               <form onSubmit={handleUpdateCard} className="space-y-3">
-                <input
-                  value={editFront}
-                  onChange={(e) => setEditFront(e.target.value)}
-                  placeholder="Mặt trước"
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  required
-                />
+                <div>
+                  <input
+                    value={editFront}
+                    onChange={(e) => setEditFront(e.target.value)}
+                    placeholder="Cách đọc (hiragana) *"
+                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                    required
+                  />
+                  <input
+                    value={editKanji}
+                    onChange={(e) => setEditKanji(e.target.value)}
+                    placeholder="Kanji (tùy chọn) — hiển thị dưới cách đọc"
+                    className="w-full px-3 py-2 rounded-lg border text-sm mt-2"
+                  />
+                </div>
                 <input
                   value={editBack}
                   onChange={(e) => setEditBack(e.target.value)}
-                  placeholder="Mặt sau"
+                  placeholder="Mặt sau (nghĩa) *"
                   className="w-full px-3 py-2 rounded-lg border text-sm"
                   required
                 />
@@ -810,14 +835,20 @@ export default function Flashcards() {
                   <input
                     value={cardFront}
                     onChange={(e) => setCardFront(e.target.value)}
-                    placeholder="Mặt trước (ví dụ: 食べる)"
+                    placeholder="Cách đọc (hiragana) * ví dụ: こうこう"
                     className="w-full px-3 py-2 rounded-lg border text-sm"
                     required
                   />
                   <input
+                    value={cardKanji}
+                    onChange={(e) => setCardKanji(e.target.value)}
+                    placeholder="Kanji (tùy chọn) ví dụ: 高校 — hiển thị dưới cách đọc"
+                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                  />
+                  <input
                     value={cardBack}
                     onChange={(e) => setCardBack(e.target.value)}
-                    placeholder="Mặt sau (ví dụ: Ăn)"
+                    placeholder="Mặt sau (nghĩa) * ví dụ: Trường THPT"
                     className="w-full px-3 py-2 rounded-lg border text-sm"
                     required
                   />
