@@ -126,8 +126,7 @@ router.post("/", upload.single("file"), async (req, res) => {
       ? tags.join(",")
       : (tags || "").toString();
 
-    const isAdmin = await checkIsAdmin(requester);
-    const status = isAdmin ? "approved" : "pending";
+    const status = "approved";
 
     const result = await pool
       .request()

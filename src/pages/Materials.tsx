@@ -220,7 +220,9 @@ export default function Materials() {
               ))}
               {!loading && !filtered.length && (
                 <p className="text-muted-foreground text-sm">
-                  Không có tài liệu nào phù hợp với từ khóa tìm kiếm.
+                  {normalizedSearch
+                    ? "Không có tài liệu nào phù hợp với từ khóa tìm kiếm."
+                    : "Chưa có tài liệu nào."}
                 </p>
               )}
             </div>
@@ -279,7 +281,7 @@ export default function Materials() {
                 className="w-full gradient-accent-bg text-accent-foreground px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-70"
               >
                 <Upload size={16} />
-                {submitting ? "Đang upload..." : "Lưu tài liệu"}
+                {submitting ? "Đang upload..." : "Upload tài liệu"}
               </button>
             </form>
           </div>

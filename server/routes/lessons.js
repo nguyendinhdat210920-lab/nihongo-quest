@@ -178,10 +178,10 @@ router.post("/", upload.single("file"), async (req, res) => {
         let query = "";
         if (hasStatus && hasIsPublic) {
             query =
-                "INSERT INTO Lessons (Title, Content, CreatedBy, AttachmentUrl, AttachmentType, Status, IsPublic) OUTPUT INSERTED.* VALUES (@Title, @Content, @CreatedBy, @AttachmentUrl, @AttachmentType, N'pending', @IsPublic)";
+                "INSERT INTO Lessons (Title, Content, CreatedBy, AttachmentUrl, AttachmentType, Status, IsPublic) OUTPUT INSERTED.* VALUES (@Title, @Content, @CreatedBy, @AttachmentUrl, @AttachmentType, N'approved', @IsPublic)";
         } else if (hasStatus && !hasIsPublic) {
             query =
-                "INSERT INTO Lessons (Title, Content, CreatedBy, AttachmentUrl, AttachmentType, Status) OUTPUT INSERTED.* VALUES (@Title, @Content, @CreatedBy, @AttachmentUrl, @AttachmentType, N'pending')";
+                "INSERT INTO Lessons (Title, Content, CreatedBy, AttachmentUrl, AttachmentType, Status) OUTPUT INSERTED.* VALUES (@Title, @Content, @CreatedBy, @AttachmentUrl, @AttachmentType, N'approved')";
         } else if (!hasStatus && hasIsPublic) {
             query =
                 "INSERT INTO Lessons (Title, Content, CreatedBy, AttachmentUrl, AttachmentType, IsPublic) OUTPUT INSERTED.* VALUES (@Title, @Content, @CreatedBy, @AttachmentUrl, @AttachmentType, @IsPublic)";
