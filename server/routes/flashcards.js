@@ -23,6 +23,20 @@ const decodeMaybe = (value) => {
   }
 };
 
+const checkIsAdmin = async (username) => {
+  if (!username) return false;
+  try {
+    await poolConnect;
+    const r = await pool
+      .request()
+      .input("Username", sql.NVarChar(50), username)
+      .query("SELECT ISNULL(IsAdmin, 0) AS IsAdmin FROM Users WHERE Username = @Username");
+    return !!r.recordset?.[0]?.IsAdmin;
+  } catch {
+    return false;
+  }
+};
+
 // GET /api/flashcards/decks - list decks (username = filter "my decks")
 router.get("/decks", async (req, res) => {
   const username =
@@ -220,7 +234,8 @@ router.delete("/decks/:id", async (req, res) => {
     }
 
     const owner = decodeMaybe(check.recordset[0].OwnerUsername);
-    if (owner && owner !== requester) {
+    const isAdmin = await checkIsAdmin(requester);
+    if (owner && owner !== requester && !isAdmin) {
       return res.status(403).json({ message: "Not allowed to delete this deck" });
     }
 
@@ -368,7 +383,8 @@ router.delete("/cards/:id", async (req, res) => {
     }
 
     const owner = decodeMaybe(check.recordset[0].OwnerUsername);
-    if (owner && owner !== requester) {
+    const isAdmin = await checkIsAdmin(requester);
+    if (owner && owner !== requester && !isAdmin) {
       return res.status(403).json({ message: "Not allowed to delete this card" });
     }
 

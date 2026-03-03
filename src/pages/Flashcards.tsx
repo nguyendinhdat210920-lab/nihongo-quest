@@ -80,6 +80,7 @@ export default function Flashcards() {
   const activeUser =
     (typeof window !== "undefined" && localStorage.getItem("username")) ||
     currentUser.username;
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("isAdmin") === "true";
 
   const fetchDecks = async () => {
     try {
@@ -320,7 +321,7 @@ export default function Flashcards() {
     const studyCards = studyFilter === "needReview" ? needReviewCards : cards;
     const safeIndex = Math.min(Math.max(0, currentCard), studyCards.length - 1);
     const card = studyCards[safeIndex];
-    const isOwner = selectedDeck.ownerName === activeUser;
+    const isOwner = selectedDeck.ownerName === activeUser || isAdmin;
     const learnedCount = cards.filter((c) => c.learned).length;
 
     return (
@@ -804,7 +805,7 @@ export default function Flashcards() {
   }
 
   if (selectedDeck && cards.length === 0) {
-    const isOwner = selectedDeck.ownerName === activeUser;
+    const isOwner = selectedDeck.ownerName === activeUser || isAdmin;
     return (
       <div className="container mx-auto px-4 py-8">
         <button
@@ -963,7 +964,7 @@ export default function Flashcards() {
                     {deck.cardCount} thẻ
                   </span>
                 </div>
-                {deck.ownerName === activeUser && (
+                {(deck.ownerName === activeUser || isAdmin) && (
                   <button
                     onClick={(e) => handleDeleteDeck(deck.id, e)}
                     className="shrink-0 p-2 rounded-lg hover:bg-destructive/10 text-destructive opacity-70 hover:opacity-100 transition-opacity"

@@ -209,7 +209,8 @@ export default function Forum() {
   };
 
   const handleDeletePost = async () => {
-    if (!detailPost || !username || detailPost.post.authorName !== username) return;
+    if (!detailPost || !username) return;
+    if (detailPost.post.authorName !== username && !isAdmin) return;
     if (!confirm('Bạn có chắc muốn xóa bài viết này?')) return;
     try {
       setDeleteLoading(true);
