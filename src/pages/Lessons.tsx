@@ -23,6 +23,18 @@ import {
   Share2,
 } from "lucide-react";
 import { currentUser } from "@/lib/mockData";
+
+/** Lấy URL file qua API hiện tại (tránh domain cũ) */
+const getFileViewUrl = (url: string | null): string => {
+  if (!url) return "";
+  if (url.includes("supabase.co/storage")) return url;
+  try {
+    const pathname = new URL(url).pathname || url;
+    return apiUrl(pathname.startsWith("/") ? pathname : `/${pathname}`);
+  } catch {
+    return url.startsWith("/") ? apiUrl(url) : apiUrl(`/${url}`);
+  }
+};
 import { speakText } from "@/lib/speakText";
 
 /** Tách nội dung thành các đoạn, từ tiếng Nhật có thể click để nghe phát âm */
@@ -254,7 +266,7 @@ export default function Lessons() {
               {selectedLesson.AttachmentUrl && (
                 <div className="mt-8 pt-6 border-t flex flex-wrap gap-3">
                   <a
-                    href={selectedLesson.AttachmentUrl}
+                    href={getFileViewUrl(selectedLesson.AttachmentUrl)}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted text-sm"
@@ -262,7 +274,8 @@ export default function Lessons() {
                     <Eye size={18} /> Xem tệp đính kèm
                   </a>
                   <a
-                    href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(selectedLesson.AttachmentUrl)}`}
+                    href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(getFileViewUrl(selectedLesson.AttachmentUrl))}`}
+                    download
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted text-sm"
                   >
                     <Download size={18} /> Tải về

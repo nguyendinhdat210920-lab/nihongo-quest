@@ -210,6 +210,7 @@ export default function Materials() {
                         </a>
                         <a
                           href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(getFileViewUrl(m.fileUrl))}`}
+                          download
                           className="p-2.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors flex items-center gap-1 text-xs"
                         >
                           <Download size={16} />

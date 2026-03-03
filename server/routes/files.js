@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { Readable } from "stream";
 import { fileURLToPath } from "url";
 
 const router = express.Router();
@@ -51,7 +52,18 @@ router.get("/download", async (req, res) => {
   if (!src) return res.status(400).json({ message: "Invalid file source" });
 
   if (src.includes("supabase.co/storage")) {
-    return res.redirect(302, src);
+    try {
+      const resp = await fetch(src);
+      if (!resp.ok) return res.status(404).json({ message: "File not found" });
+      const filename = path.basename(new URL(src).pathname) || "download";
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", resp.headers.get("content-type") || "application/octet-stream");
+      Readable.fromWeb(resp.body).pipe(res);
+    } catch (err) {
+      return res.redirect(302, src);
+    }
+    return;
   }
 
   const filePath = resolveUploadFile(src);

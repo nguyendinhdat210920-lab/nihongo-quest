@@ -79,7 +79,11 @@ export default function Dashboard() {
   return (
     <div className="container mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold font-jp mb-2">おはよう、<span className="gradient-text">{username || "bạn"}</span>!</h1>
+        <h1 className="text-3xl font-bold font-jp mb-2">{(() => {
+          const h = new Date().getHours();
+          const greet = h < 10 ? "おはよう" : h < 18 ? "こんにちは" : "こんばんは";
+          return <>{greet}、<span className="gradient-text">{username || "bạn"}</span>!</>;
+        })()}</h1>
         <p className="text-muted-foreground mb-8">Hãy tiếp tục hành trình học tiếng Nhật nhé 🌸</p>
         <div className="mb-4 flex items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
