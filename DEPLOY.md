@@ -89,11 +89,13 @@ git push -u origin main
 
 ---
 
-## Tài liệu không mất khi restart (Supabase Storage)
+## File không mất khi restart (Supabase Storage)
 
-Để file tài liệu **không mất** khi Render restart/redeploy:
+Để file **tài liệu** và **diễn đàn** không mất khi Render restart/redeploy:
 
-1. Supabase Dashboard → **Storage** → **New bucket** → Tên: `materials` → Bật **Public** → Create
+1. Supabase Dashboard → **Storage** → **New bucket**:
+   - Tên: `materials` → Bật **Public** → Create
+   - Tên: `forum` → Bật **Public** → Create
 2. Render → Environment → Thêm:
    - `SUPABASE_URL` = `https://YOUR_PROJECT.supabase.co`
    - `SUPABASE_SERVICE_ROLE_KEY` = (Settings → API → service_role key)

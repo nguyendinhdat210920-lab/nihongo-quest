@@ -12,6 +12,7 @@ const serverRoot = path.resolve(__dirname, "..");
 const uploadsRoot = path.join(serverRoot, "uploads");
 const lessonsDir = path.join(uploadsRoot, "lessons");
 const materialsDir = path.join(uploadsRoot, "materials");
+const forumDir = path.join(uploadsRoot, "forum");
 
 const extractPathname = (src) => {
   if (!src) return "";
@@ -32,6 +33,7 @@ const resolveUploadFile = (src) => {
 
   const lessonsMarker = "/uploads/lessons/";
   const materialsMarker = "/uploads/materials/";
+  const forumMarker = "/uploads/forum/";
 
   if (pathname.includes(lessonsMarker)) {
     const fileName = path.basename(pathname.split(lessonsMarker).pop() || "");
@@ -41,6 +43,11 @@ const resolveUploadFile = (src) => {
   if (pathname.includes(materialsMarker)) {
     const fileName = path.basename(pathname.split(materialsMarker).pop() || "");
     return fileName ? path.join(materialsDir, fileName) : null;
+  }
+
+  if (pathname.includes(forumMarker)) {
+    const fileName = path.basename(pathname.split(forumMarker).pop() || "");
+    return fileName ? path.join(forumDir, fileName) : null;
   }
 
   return null;

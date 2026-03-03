@@ -5,6 +5,18 @@ import { toast } from 'sonner';
 import axios from 'axios';
 import { apiUrl, getAuthHeaders } from '@/lib/api';
 
+/** Lấy URL file qua API hiện tại (tránh domain cũ) */
+const getFileViewUrl = (url: string | null): string => {
+  if (!url) return "";
+  if (url.includes("supabase.co/storage")) return url;
+  try {
+    const pathname = new URL(url).pathname || url;
+    return apiUrl(pathname.startsWith("/") ? pathname : `/${pathname}`);
+  } catch {
+    return url.startsWith("/") ? apiUrl(url) : apiUrl(`/${url}`);
+  }
+};
+
 interface Post {
   id: number;
   authorName: string;
@@ -371,9 +383,14 @@ export default function Forum() {
                 <h3 className="font-semibold text-lg mb-2 font-jp">{post.title}</h3>
                 <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{post.content}</p>
                 {post.fileUrl && (
-                  <a href={post.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline mb-4" onClick={(e) => e.stopPropagation()}>
-                    <FileText size={14} /> {post.fileName || 'Tệp đính kèm'}
-                  </a>
+                  <div className="flex items-center gap-2 mb-4">
+                    <a href={getFileViewUrl(post.fileUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                      <FileText size={14} /> {post.fileName || 'Tệp đính kèm'}
+                    </a>
+                    <a href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(getFileViewUrl(post.fileUrl))}`} download onClick={(e) => e.stopPropagation()} className="text-xs text-muted-foreground hover:text-primary">
+                      Tải về
+                    </a>
+                  </div>
                 )}
                 {!post.fileUrl && <div className="mb-4" />}
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -550,9 +567,14 @@ export default function Forum() {
               <h2 className="text-xl font-bold font-jp mb-2">{detailPost.post.title}</h2>
               <p className="text-muted-foreground mb-2 whitespace-pre-wrap">{detailPost.post.content}</p>
               {detailPost.post.fileUrl && (
-                <a href={detailPost.post.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-primary hover:underline mb-4">
-                  <FileText size={18} /> {detailPost.post.fileName || 'Tệp đính kèm'}
-                </a>
+                <div className="flex items-center gap-2 mb-4">
+                  <a href={getFileViewUrl(detailPost.post.fileUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-primary hover:underline">
+                    <FileText size={18} /> {detailPost.post.fileName || 'Tệp đính kèm'}
+                  </a>
+                  <a href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(getFileViewUrl(detailPost.post.fileUrl))}`} download className="text-xs text-muted-foreground hover:text-primary">
+                    Tải về
+                  </a>
+                </div>
               )}
               {!detailPost.post.fileUrl && <div className="mb-4" />}
               <div className="flex items-center gap-4 text-sm text-muted-foreground mb-6">

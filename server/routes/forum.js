@@ -7,6 +7,9 @@ import { sql, pool, poolConnect } from "../db.js";
 const router = express.Router();
 
 const baseUrl = process.env.API_URL || "http://localhost:3000";
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+const FORUM_BUCKET = "forum";
 
 const forumUploadDir = path.resolve("uploads/forum");
 if (!fs.existsSync(forumUploadDir)) {
@@ -167,9 +170,36 @@ router.post("/posts", upload.single("file"), async (req, res) => {
   let fileName = null;
   let fileType = null;
   if (req.file) {
-    fileUrl = `${baseUrl}/uploads/forum/${req.file.filename}`;
     fileName = req.file.originalname || req.file.filename;
     fileType = (req.file.mimetype || "").split("/")[0];
+
+    if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+        const filePath = req.file.filename;
+        const buf = fs.readFileSync(req.file.path);
+        const { data, error } = await supabase.storage.from(FORUM_BUCKET).upload(filePath, buf, {
+          contentType: req.file.mimetype,
+          upsert: true,
+        });
+        if (error) throw error;
+        const { data: urlData } = supabase.storage.from(FORUM_BUCKET).getPublicUrl(data.path);
+        fileUrl = urlData.publicUrl;
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (_) {}
+      } catch (err) {
+        console.error("Supabase forum upload failed, fallback to local:", err?.message);
+        fileUrl = null;
+      }
+    }
+    if (!fileUrl) {
+      const base =
+        (req.protocol && req.get("host") ? `${req.protocol}://${req.get("host")}` : null) ||
+        baseUrl;
+      fileUrl = `${String(base).replace(/\/$/, "")}/uploads/forum/${req.file.filename}`;
+    }
   }
 
   const status = (await checkIsAdmin(requester)) ? "approved" : "pending";

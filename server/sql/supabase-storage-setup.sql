@@ -1,14 +1,13 @@
--- Tạo bucket "materials" trong Supabase Storage (file tài liệu không mất khi Render restart)
+-- Tạo 2 bucket trong Supabase Storage (file không mất khi Render restart)
 -- Chạy trong Supabase Dashboard: Storage -> New bucket
 
--- Hoặc dùng SQL trong SQL Editor (nếu có quyền):
--- INSERT INTO storage.buckets (id, name, public) VALUES ('materials', 'materials', true);
+-- Bucket 1: materials (tài liệu)
+-- Bucket 2: forum (file đính kèm diễn đàn)
 
 -- Cách thủ công:
 -- 1. Vào Supabase Dashboard -> Storage
--- 2. New bucket -> Tên: materials
--- 3. Bật "Public bucket" (để xem/tải file)
--- 4. Create bucket
+-- 2. New bucket -> Tên: materials -> Bật Public -> Create
+-- 3. New bucket -> Tên: forum -> Bật Public -> Create
 
 -- Sau đó thêm env vars trên Render:
 -- SUPABASE_URL = https://YOUR_PROJECT.supabase.co
