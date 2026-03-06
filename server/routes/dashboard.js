@@ -180,20 +180,41 @@ router.get("/stats", async (req, res) => {
     const dayNames = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
     const weeklyProgress = dayNames.map((day) => ({ day, words: 0, quizzes: 0 }));
     try {
-      const weekResult = await pool
-        .request()
-        .input("Username", sql.NVarChar(255), username)
-        .query(`
-          SELECT DATEPART(WEEKDAY, CreatedAt) AS Dow, COUNT(*) AS Cnt
-          FROM QuizResults
-          WHERE Username = @Username AND CreatedAt >= DATEADD(day, -7, GETDATE())
-          GROUP BY DATEPART(WEEKDAY, CreatedAt)
-        `);
-      (weekResult.recordset || []).forEach((r) => {
-        const dow = r.Dow ?? r.dow ?? 1;
-        const idx = Math.min(Math.max(dow - 1, 0), 6);
-        weeklyProgress[idx].quizzes = r.Cnt ?? r.cnt ?? 0;
-      });
+      if (usePostgres) {
+        // Nhóm theo ngày/thu theo giờ VN để khớp streak
+        const weekRes = await pool.query(
+          `
+            SELECT
+              EXTRACT(DOW FROM ((created_at AT TIME ZONE $1)::date))::int AS dow0,
+              COUNT(*)::int AS cnt
+            FROM quiz_results
+            WHERE username = $2
+              AND ((created_at AT TIME ZONE $1)::date) >= ((NOW() AT TIME ZONE $1)::date - INTERVAL '6 days')
+            GROUP BY dow0
+          `,
+          [TZ, username]
+        );
+        (weekRes.rows || []).forEach((r) => {
+          const dow0 = Number(r.dow0); // 0..6 (Sun..Sat)
+          const idx = Number.isFinite(dow0) ? Math.min(Math.max(dow0, 0), 6) : 0;
+          weeklyProgress[idx].quizzes = Number(r.cnt ?? 0);
+        });
+      } else {
+        const weekResult = await pool
+          .request()
+          .input("Username", sql.NVarChar(255), username)
+          .query(`
+            SELECT DATEPART(WEEKDAY, CreatedAt) AS Dow, COUNT(*) AS Cnt
+            FROM QuizResults
+            WHERE Username = @Username AND CreatedAt >= DATEADD(day, -7, GETDATE())
+            GROUP BY DATEPART(WEEKDAY, CreatedAt)
+          `);
+        (weekResult.recordset || []).forEach((r) => {
+          const dow = r.Dow ?? r.dow ?? 1;
+          const idx = Math.min(Math.max(dow - 1, 0), 6);
+          weeklyProgress[idx].quizzes = r.Cnt ?? r.cnt ?? 0;
+        });
+      }
     } catch {}
 
     let monthlyScores = [];
