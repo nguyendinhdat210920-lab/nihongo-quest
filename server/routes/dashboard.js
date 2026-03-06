@@ -21,6 +21,17 @@ router.get("/stats", async (req, res) => {
     return res.status(401).json({ message: "Vui lòng đăng nhập" });
   }
 
+  const dateToDayNumber = (ymd) => {
+    // ymd: 'YYYY-MM-DD' -> day number (UTC) to avoid timezone issues
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ""));
+    if (!m) return null;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    if (!y || !mo || !d) return null;
+    return Math.floor(Date.UTC(y, mo - 1, d) / (24 * 60 * 60 * 1000));
+  };
+
   try {
     await poolConnect;
 
@@ -85,17 +96,31 @@ router.get("/stats", async (req, res) => {
         const d = r.Activitydate ?? r.ActivityDate;
         return d instanceof Date ? d.toISOString().slice(0, 10) : String(d || "").slice(0, 10);
       });
+      today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
     }
 
+    // Tính streak dựa trên lần làm quiz gần nhất (không bắt buộc phải có quiz hôm nay)
+    // Tính streak:
+    // - Nếu lần làm quiz gần nhất là hôm nay hoặc hôm qua: streak = chuỗi ngày liên tiếp tính từ ngày gần nhất.
+    // - Nếu bỏ >= 1 ngày (tức last_activity <= hôm kia trở về trước): streak = 0.
     let streak = 0;
-    if (dates.includes(today)) {
-      streak = 1;
-      for (let i = 1; i < dates.length; i++) {
-        const prev = new Date(dates[i - 1]);
-        const curr = new Date(dates[i]);
-        const diffDays = Math.round((prev - curr) / (1000 * 60 * 60 * 24));
-        if (diffDays === 1) streak++;
-        else break;
+    if (dates.length > 0) {
+      const todayDay = dateToDayNumber(today);
+      const lastDay = dateToDayNumber(dates[0]);
+      if (todayDay != null && lastDay != null) {
+        const gap = todayDay - lastDay; // 0 = hôm nay, 1 = hôm qua, 2+ = đứt streak
+        if (gap === 0 || gap === 1) {
+          streak = 1;
+          for (let i = 1; i < dates.length; i++) {
+            const prev = dateToDayNumber(dates[i - 1]);
+            const curr = dateToDayNumber(dates[i]);
+            if (prev == null || curr == null) break;
+            if (prev - curr === 1) streak++;
+            else break;
+          }
+        } else {
+          streak = 0;
+        }
       }
     }
 
