@@ -74,11 +74,20 @@ const extractStrokePaths = (svgText: string): { viewBox: string; paths: { d: str
   }
 };
 
-const buildStrokeIconSvg = (viewBox: string, d: string, stroke: string) => {
-  // Minimal SVG for a single stroke icon
+const buildStrokeIconSvg = (viewBox: string, allPaths: string[], currentIndex: number) => {
+  // Step icon: previous strokes gray, current stroke red
+  const prev = allPaths
+    .slice(0, currentIndex)
+    .map(
+      (d) =>
+        `<path d="${escapeXml(d)}" fill="none" stroke="#CBD5E1" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
+    )
+    .join("");
+  const curr = `<path d="${escapeXml(allPaths[currentIndex])}" fill="none" stroke="#EF4444" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="${escapeXml(viewBox)}">
-  <path d="${escapeXml(d)}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  ${prev}
+  ${curr}
 </svg>`;
 };
 
@@ -183,11 +192,12 @@ function drawWorksheetRows(ctx: CanvasRenderingContext2D, w: number, h: number, 
   const usableH = Math.max(1, h - topY - bottomPad);
 
   const rows = Math.min(glyphs.length, MAX_ROWS);
-  const rowGap = 12;
+  const rowGap = 10;
   const labelW = Math.min(64, Math.max(52, w * 0.08));
   const cols = 10;
-
-  const rowH = rows > 0 ? Math.min(68, Math.max(46, (usableH - rowGap * (rows - 1)) / rows)) : 60;
+  const metaH = 16;
+  const rowBlockH = rows > 0 ? Math.min(78, Math.max(54, (usableH - rowGap * (rows - 1)) / rows)) : 64;
+  const rowH = Math.max(40, rowBlockH - metaH);
   const gridW = w - padding * 2 - labelW;
   const cellW = gridW / cols;
 
@@ -201,7 +211,8 @@ function drawWorksheetRows(ctx: CanvasRenderingContext2D, w: number, h: number, 
 
   for (let r = 0; r < rows; r++) {
     const ch = glyphs[r];
-    const y = topY + r * (rowH + rowGap);
+    const y = topY + r * (rowBlockH + rowGap);
+    const gridY = y + metaH;
     const labelX = padding + labelW / 2;
     const gridX = padding + labelW;
 
@@ -209,10 +220,10 @@ function drawWorksheetRows(ctx: CanvasRenderingContext2D, w: number, h: number, 
     ctx.fillStyle = "#0F172A";
     ctx.font = `700 ${labelFont}px ${fontFamily}`;
     ctx.textBaseline = "middle";
-    ctx.fillText(ch, labelX, y + rowH / 2);
+    ctx.fillText(ch, labelX, gridY + rowH / 2);
 
     // grid row
-    drawRowGrid(ctx, gridX, y, gridW, rowH, cols);
+    drawRowGrid(ctx, gridX, gridY, gridW, rowH, cols);
 
     // faint guide in first 6 cells
     ctx.fillStyle = "rgba(2, 132, 199, 0.20)";
@@ -221,7 +232,7 @@ function drawWorksheetRows(ctx: CanvasRenderingContext2D, w: number, h: number, 
       const inGuide = c < 7; // like the screenshot: many guide boxes
       if (!inGuide) continue;
       const x = gridX + c * cellW + cellW / 2;
-      const yy = y + rowH / 2 + rowH * 0.20;
+      const yy = gridY + rowH / 2 + rowH * 0.20;
       ctx.fillText(ch, x, yy);
     }
   }
@@ -297,9 +308,11 @@ export default function KanjiWorksheet() {
       const bottomPad = padding;
       const usableH = Math.max(1, canvas.height - topY - bottomPad);
       const rows = Math.min(glyphs.length, MAX_ROWS);
-      const rowGap = 12;
+      const rowGap = 10;
       const labelW = Math.min(64, Math.max(52, canvas.width * 0.08));
-      const rowH = rows > 0 ? Math.min(68, Math.max(46, (usableH - rowGap * (rows - 1)) / rows)) : 60;
+      const metaH = 16;
+      const rowBlockH = rows > 0 ? Math.min(78, Math.max(54, (usableH - rowGap * (rows - 1)) / rows)) : 64;
+      const rowH = Math.max(40, rowBlockH - metaH);
       const gridX = padding + labelW;
 
       for (let r = 0; r < rows; r++) {
@@ -307,9 +320,9 @@ export default function KanjiWorksheet() {
         const diag = strokeDiagramCacheRef.current.get(ch);
         if (!diag || !diag.icons.length) continue;
 
-        const y = topY + r * (rowH + rowGap);
-        const iconSize = Math.max(16, Math.floor(rowH * 0.38));
-        const yy = Math.max(padding + 78, y - iconSize - 6);
+        const y = topY + r * (rowBlockH + rowGap);
+        const iconSize = Math.max(13, Math.floor(rowH * 0.28));
+        const yy = y + Math.max(0, Math.floor((metaH - iconSize) / 2));
         let x = gridX + 6;
 
         // icons for first strokes
@@ -327,7 +340,7 @@ export default function KanjiWorksheet() {
         // (x nét)
         ctx.save();
         ctx.fillStyle = "#64748B";
-        ctx.font = `600 ${Math.max(10, Math.floor(iconSize * 0.55))}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+        ctx.font = `600 ${Math.max(9, Math.floor(iconSize * 0.85))}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.fillText(`(${diag.count} nét)`, x + 4, yy + iconSize / 2);
@@ -396,26 +409,24 @@ export default function KanjiWorksheet() {
         const total = parsed.paths.length;
         if (!total) return;
 
-        // Build icons: one per stroke (up to 10 kept in cache)
-        const icons: HTMLImageElement[] = [];
+        // Build step icons in order (up to 10 icons kept in cache)
         const toBuild = Math.min(total, 10);
-
-        await Promise.all(
-          parsed.paths.slice(0, toBuild).map((p) => {
-            return new Promise<void>((resolve) => {
-              const iconSvg = buildStrokeIconSvg(parsed.viewBox, p.d, "#EF4444");
+        const pathDs = parsed.paths.map((p) => p.d);
+        const icons = await Promise.all(
+          pathDs.slice(0, toBuild).map((_, idx) => {
+            return new Promise<HTMLImageElement | null>((resolve) => {
+              const iconSvg = buildStrokeIconSvg(parsed.viewBox, pathDs, idx);
               const blob = new Blob([iconSvg], { type: "image/svg+xml" });
               const blobUrl = URL.createObjectURL(blob);
               const img = new Image();
               img.decoding = "async";
               img.onload = () => {
                 URL.revokeObjectURL(blobUrl);
-                if (!cancelled) icons.push(img);
-                resolve();
+                resolve(img);
               };
               img.onerror = () => {
                 URL.revokeObjectURL(blobUrl);
-                resolve();
+                resolve(null);
               };
               img.src = blobUrl;
             });
@@ -423,8 +434,9 @@ export default function KanjiWorksheet() {
         );
 
         if (cancelled) return;
+        const finalIcons = icons.filter((x): x is HTMLImageElement => !!x);
         // Keep icons in correct order
-        strokeDiagramCacheRef.current.set(ch, { count: total, icons });
+        strokeDiagramCacheRef.current.set(ch, { count: total, icons: finalIcons });
         setStrokeImgTick((x) => x + 1);
       } catch {
         // ignore
