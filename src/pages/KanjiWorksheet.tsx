@@ -8,6 +8,7 @@ type Stroke = { points: Point[] };
 
 const MAX_KANJI = 10;
 const MAX_ROWS = 10;
+const SUGGEST_LIMIT = 8;
 
 const TOPICS: { id: string; label: string; kanji: string }[] = [
   { id: "n5-night", label: "Số đếm N5", kanji: "一二三四五六七八九十" },
@@ -21,13 +22,8 @@ const TOPICS: { id: string; label: string; kanji: string }[] = [
 ];
 
 const sanitizeKanjiInput = (s: string) => {
-  // keep CJK + kana + basic punctuation/spaces, then collapse spaces
-  const cleaned = s
-    .replace(/[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  // remove spaces for count, but keep as typed in input
-  return cleaned;
+  // Keep CJK + kana + spaces. Do NOT over-normalize here; IME composition needs raw value.
+  return String(s || "").replace(/[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\s]/g, "");
 };
 
 const splitGlyphs = (s: string) => {
@@ -39,6 +35,13 @@ const splitGlyphs = (s: string) => {
     if (out.length >= MAX_KANJI) break;
   }
   return out;
+};
+
+const toKanjiVgHex = (ch: string) => {
+  const cp = ch.codePointAt(0);
+  if (!cp) return null;
+  // KanjiVG uses 5-digit lowercase hex (e.g., 04e00.svg)
+  return cp.toString(16).padStart(5, "0");
 };
 
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent) {
@@ -213,9 +216,18 @@ export default function KanjiWorksheet() {
   const [generated, setGenerated] = useState<string[]>([]);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const currentStroke = useRef<Stroke | null>(null);
+  const suggestAbortRef = useRef<AbortController | null>(null);
+  const suggestTimerRef = useRef<number | null>(null);
+
+  // Stroke order diagram cache (KanjiVG SVG rendered to <img>)
+  const strokeImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [strokeImgTick, setStrokeImgTick] = useState(0);
 
   const inputGlyphs = useMemo(() => splitGlyphs(sanitizeKanjiInput(input)), [input]);
   const count = inputGlyphs.length;
@@ -239,6 +251,37 @@ export default function KanjiWorksheet() {
     } else {
       drawWorksheetRows(ctx, canvas.width, canvas.height, glyphs);
     }
+
+    // Stroke order diagrams (draw on top, small, above each row)
+    if (glyphs.length > 0) {
+      const padding = 28;
+      const topY = padding + 92;
+      const bottomPad = padding;
+      const usableH = Math.max(1, canvas.height - topY - bottomPad);
+      const rows = Math.min(glyphs.length, MAX_ROWS);
+      const rowGap = 12;
+      const labelW = Math.min(64, Math.max(52, canvas.width * 0.08));
+      const rowH = rows > 0 ? Math.min(68, Math.max(46, (usableH - rowGap * (rows - 1)) / rows)) : 60;
+      const gridX = padding + labelW;
+
+      for (let r = 0; r < rows; r++) {
+        const ch = glyphs[r];
+        const img = strokeImgCacheRef.current.get(ch);
+        if (!img) continue;
+        // place in a small box above row grid, left-aligned
+        const y = topY + r * (rowH + rowGap);
+        const boxH = Math.max(18, Math.floor(rowH * 0.55));
+        const boxW = boxH;
+        const x = gridX + 6;
+        const yy = Math.max(padding + 78, y - boxH - 6);
+        try {
+          ctx.drawImage(img, x, yy, boxW, boxH);
+        } catch {
+          // ignore draw errors
+        }
+      }
+    }
+
     drawStrokes(ctx, strokes);
   };
 
@@ -273,7 +316,55 @@ export default function KanjiWorksheet() {
   useEffect(() => {
     redraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strokes, glyphs.join("|")]);
+  }, [strokes, glyphs.join("|"), strokeImgTick]);
+
+  // Fetch Kanji stroke order SVGs (KanjiVG) for current glyphs
+  useEffect(() => {
+    const needed = glyphs.filter((g) => !strokeImgCacheRef.current.has(g));
+    if (!needed.length) return;
+
+    let cancelled = false;
+    const loadOne = async (ch: string) => {
+      const hex = toKanjiVgHex(ch);
+      if (!hex) return;
+      // Only for CJK Unified Ideographs range; skip kana
+      const cp = ch.codePointAt(0) || 0;
+      if (cp < 0x4e00 || cp > 0x9fff) return;
+
+      const url = `https://kanjivg.tagaini.net/kanjivg/kanji/${hex}.svg`;
+      try {
+        const resp = await fetch(url, { cache: "force-cache" });
+        if (!resp.ok) return;
+        const svg = await resp.text();
+        if (cancelled) return;
+        const blob = new Blob([svg], { type: "image/svg+xml" });
+        const blobUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.decoding = "async";
+        img.onload = () => {
+          URL.revokeObjectURL(blobUrl);
+          if (cancelled) return;
+          strokeImgCacheRef.current.set(ch, img);
+          setStrokeImgTick((x) => x + 1);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+        };
+        img.src = blobUrl;
+      } catch {
+        // ignore
+      }
+    };
+
+    // Fire and forget (small list)
+    needed.slice(0, MAX_ROWS).forEach((ch) => {
+      loadOne(ch);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [glyphs.join("|")]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -349,6 +440,7 @@ export default function KanjiWorksheet() {
     setSelectedTopic(null);
     setGenerated([]);
     setStrokes([]);
+    setSuggestions([]);
   };
 
   const handleGenerate = () => {
@@ -383,6 +475,61 @@ export default function KanjiWorksheet() {
     pdf.save(`kanji-worksheet-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
+  // Kanji suggestions from Jisho (works for kana/kanji queries)
+  useEffect(() => {
+    if (isComposing) return;
+    const q = sanitizeKanjiInput(input).trim();
+    if (!q) {
+      setSuggestions([]);
+      return;
+    }
+
+    // Debounce
+    if (suggestTimerRef.current) window.clearTimeout(suggestTimerRef.current);
+    suggestTimerRef.current = window.setTimeout(async () => {
+      try {
+        suggestAbortRef.current?.abort();
+        const ac = new AbortController();
+        suggestAbortRef.current = ac;
+        setSuggestLoading(true);
+
+        // Query last token (use full string, but keep it short)
+        const keyword = encodeURIComponent(q.slice(-20));
+        const resp = await fetch(`https://jisho.org/api/v1/search/words?keyword=${keyword}`, { signal: ac.signal });
+        if (!resp.ok) throw new Error("bad response");
+        const data = await resp.json();
+        const words: string[] = [];
+        for (const item of data?.data || []) {
+          const jp = item?.japanese?.[0];
+          const w1 = jp?.word;
+          const r1 = jp?.reading;
+          if (typeof w1 === "string" && w1) words.push(w1);
+          else if (typeof r1 === "string" && r1) words.push(r1);
+          if (words.length >= SUGGEST_LIMIT) break;
+        }
+        setSuggestions([...new Set(words)].slice(0, SUGGEST_LIMIT));
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        setSuggestions([]);
+      } finally {
+        setSuggestLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      if (suggestTimerRef.current) window.clearTimeout(suggestTimerRef.current);
+    };
+  }, [input, isComposing]);
+
+  const applySuggestion = (s: string) => {
+    // Insert suggestion as full content (simpler + predictable)
+    const g = splitGlyphs(sanitizeKanjiInput(s));
+    setInput(g.join(""));
+    setSelectedTopic(null);
+    setGenerated([]);
+    setStrokes([]);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
@@ -402,17 +549,50 @@ export default function KanjiWorksheet() {
               <textarea
                 value={input}
                 onChange={(e) => {
-                  const next = sanitizeKanjiInput(e.target.value);
-                  // keep raw but enforce max glyphs
+                  const nextRaw = e.target.value;
+                  // IMPORTANT: do not mutate during IME composition
+                  if (isComposing) {
+                    setInput(nextRaw);
+                    return;
+                  }
+                  const next = sanitizeKanjiInput(nextRaw);
                   const g = splitGlyphs(next);
                   setInput(g.join(""));
                   setSelectedTopic(null);
                   setGenerated([]);
                 }}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={(e) => {
+                  setIsComposing(false);
+                  const next = sanitizeKanjiInput((e.target as HTMLTextAreaElement).value);
+                  const g = splitGlyphs(next);
+                  setInput(g.join(""));
+                }}
                 placeholder="Ví dụ: 山川花木"
                 rows={3}
                 className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-ring focus:outline-none font-jp text-lg resize-none"
               />
+
+              {/* Suggestions bar */}
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground">Gợi ý:</span>
+                {suggestLoading && <span className="text-xs text-muted-foreground">đang tìm…</span>}
+                {!suggestLoading && suggestions.length === 0 && (
+                  <span className="text-xs text-muted-foreground">gõ hira/kata/kanji để xem gợi ý</span>
+                )}
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => applySuggestion(s)}
+                    className="px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm font-jp"
+                    title="Chọn gợi ý"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
               <div className="mt-4 flex gap-3">
                 <button
                   type="button"
