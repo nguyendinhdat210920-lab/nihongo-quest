@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Download, Eraser, RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { Copy, Download, Eraser, RefreshCcw, Sparkles, Undo2, Wand2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[] };
 
 const MAX_KANJI = 10;
+const MAX_ROWS = 10;
 
 const TOPICS: { id: string; label: string; kanji: string }[] = [
   { id: "n5-night", label: "Số đếm N5", kanji: "一二三四五六七八九十" },
@@ -48,7 +49,7 @@ function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent) {
   };
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, cols: number, rows: number) {
+function drawWorksheetBase(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
 
@@ -58,115 +59,132 @@ function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, cols: num
 
   // margins
   const padding = 28;
-  const headerH = 86;
-  const gridX = padding;
-  const gridY = padding + headerH;
-  const gridW = w - padding * 2;
-  const gridH = h - gridY - padding;
-
   // header
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 26px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  ctx.fillStyle = "#0F172A";
+  ctx.font = "700 28px system-ui, -apple-system, Segoe UI, Roboto, Arial";
   ctx.textAlign = "center";
-  ctx.fillText("Bảng tập viết Kanji", w / 2, padding + 34);
-  ctx.font = "400 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  ctx.fillText("Luyện viết Kanji", w / 2, padding + 32);
+
+  ctx.fillStyle = "#64748B";
+  ctx.font = "600 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  ctx.fillText("A4 WORKSHEET", w / 2, padding + 52);
+
+  ctx.fillStyle = "#334155";
+  ctx.font = "400 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
   ctx.textAlign = "left";
-  ctx.fillStyle = "#374151";
-  ctx.fillText("Tên: ____________________", padding, padding + 60);
+  ctx.fillText("Họ và tên: ____________________", padding, padding + 70);
   ctx.textAlign = "right";
-  ctx.fillText("Ngày: ____/____/______", w - padding, padding + 60);
-
-  // grid outer
-  ctx.strokeStyle = "#CBD5E1";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(gridX, gridY, gridW, gridH);
-
-  const cellW = gridW / cols;
-  const cellH = gridH / rows;
-
-  // grid lines
-  ctx.strokeStyle = "#E2E8F0";
-  ctx.lineWidth = 1;
-  for (let c = 1; c < cols; c++) {
-    const x = gridX + c * cellW;
-    ctx.beginPath();
-    ctx.moveTo(x, gridY);
-    ctx.lineTo(x, gridY + gridH);
-    ctx.stroke();
-  }
-  for (let r = 1; r < rows; r++) {
-    const y = gridY + r * cellH;
-    ctx.beginPath();
-    ctx.moveTo(gridX, y);
-    ctx.lineTo(gridX + gridW, y);
-    ctx.stroke();
-  }
-
-  // diagonal + center guidelines in each cell
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x0 = gridX + c * cellW;
-      const y0 = gridY + r * cellH;
-      const x1 = x0 + cellW;
-      const y1 = y0 + cellH;
-      const xc = x0 + cellW / 2;
-      const yc = y0 + cellH / 2;
-
-      // diagonals
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x1, y0);
-      ctx.lineTo(x0, y1);
-      ctx.stroke();
-
-      // center cross
-      ctx.beginPath();
-      ctx.moveTo(xc, y0);
-      ctx.lineTo(xc, y1);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x0, yc);
-      ctx.lineTo(x1, yc);
-      ctx.stroke();
-    }
-  }
+  ctx.fillText("Ngày: ____/____/______", w - padding, padding + 70);
 
   ctx.restore();
 }
 
-function drawFaintKanji(
+function drawRowGrid(
   ctx: CanvasRenderingContext2D,
-  glyphs: string[],
+  x: number,
+  y: number,
   w: number,
   h: number,
-  cols: number,
-  rows: number
+  cols: number
 ) {
+  ctx.save();
+  // outer border
+  ctx.strokeStyle = "#CBD5E1";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x, y, w, h);
+
+  // vertical lines
+  ctx.strokeStyle = "#E2E8F0";
+  ctx.lineWidth = 1;
+  const cellW = w / cols;
+  for (let c = 1; c < cols; c++) {
+    const xx = x + c * cellW;
+    ctx.beginPath();
+    ctx.moveTo(xx, y);
+    ctx.lineTo(xx, y + h);
+    ctx.stroke();
+  }
+
+  // guidelines in each cell (diagonal + cross)
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+  for (let c = 0; c < cols; c++) {
+    const x0 = x + c * cellW;
+    const x1 = x0 + cellW;
+    const y0 = y;
+    const y1 = y + h;
+    const xc = x0 + cellW / 2;
+    const yc = y0 + h / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x1, y0);
+    ctx.lineTo(x0, y1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(xc, y0);
+    ctx.lineTo(xc, y1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x0, yc);
+    ctx.lineTo(x1, yc);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawWorksheetRows(ctx: CanvasRenderingContext2D, w: number, h: number, glyphs: string[]) {
   const padding = 28;
-  const headerH = 86;
-  const gridX = padding;
-  const gridY = padding + headerH;
-  const gridW = w - padding * 2;
-  const gridH = h - gridY - padding;
+  const topY = padding + 92;
+  const bottomPad = padding;
+  const usableH = Math.max(1, h - topY - bottomPad);
+
+  const rows = Math.min(glyphs.length, MAX_ROWS);
+  const rowGap = 12;
+  const labelW = Math.min(64, Math.max(52, w * 0.08));
+  const cols = 10;
+
+  const rowH = rows > 0 ? Math.min(68, Math.max(46, (usableH - rowGap * (rows - 1)) / rows)) : 60;
+  const gridW = w - padding * 2 - labelW;
   const cellW = gridW / cols;
-  const cellH = gridH / rows;
 
   ctx.save();
-  ctx.fillStyle = "rgba(2, 132, 199, 0.20)";
   ctx.textAlign = "center";
-  // A font that usually exists on Windows; fallback to system
-  ctx.font = `700 ${Math.floor(Math.min(cellW, cellH) * 0.62)}px "Yu Mincho","YuMincho","MS Mincho","Noto Serif JP",serif`;
 
-  for (let i = 0; i < glyphs.length && i < cols; i++) {
-    const ch = glyphs[i];
-    const x = gridX + i * cellW + cellW / 2;
-    const y = gridY + cellH / 2 + (cellH * 0.24);
-    ctx.fillText(ch, x, y);
+  // font sizes based on row height
+  const faintFont = Math.floor(Math.min(cellW, rowH) * 0.62);
+  const labelFont = Math.floor(rowH * 0.70);
+  const fontFamily = `"Yu Mincho","YuMincho","MS Mincho","Noto Serif JP",serif`;
+
+  for (let r = 0; r < rows; r++) {
+    const ch = glyphs[r];
+    const y = topY + r * (rowH + rowGap);
+    const labelX = padding + labelW / 2;
+    const gridX = padding + labelW;
+
+    // kanji label (left)
+    ctx.fillStyle = "#0F172A";
+    ctx.font = `700 ${labelFont}px ${fontFamily}`;
+    ctx.textBaseline = "middle";
+    ctx.fillText(ch, labelX, y + rowH / 2);
+
+    // grid row
+    drawRowGrid(ctx, gridX, y, gridW, rowH, cols);
+
+    // faint guide in first 6 cells
+    ctx.fillStyle = "rgba(2, 132, 199, 0.20)";
+    ctx.font = `700 ${faintFont}px ${fontFamily}`;
+    for (let c = 0; c < cols; c++) {
+      const inGuide = c < 7; // like the screenshot: many guide boxes
+      if (!inGuide) continue;
+      const x = gridX + c * cellW + cellW / 2;
+      const yy = y + rowH / 2 + rowH * 0.20;
+      ctx.fillText(ch, x, yy);
+    }
   }
+
   ctx.restore();
 }
 
@@ -190,19 +208,18 @@ function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[]) {
 }
 
 export default function KanjiWorksheet() {
-  const [input, setInput] = useState("山川花木");
+  const [input, setInput] = useState("今玉交合歩茶弓雲算小");
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [generated, setGenerated] = useState<string[]>([]);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const currentStroke = useRef<Stroke | null>(null);
 
-  const glyphs = useMemo(() => splitGlyphs(sanitizeKanjiInput(input)), [input]);
-  const count = glyphs.length;
-
-  const cols = 10;
-  const rows = 8;
+  const inputGlyphs = useMemo(() => splitGlyphs(sanitizeKanjiInput(input)), [input]);
+  const count = inputGlyphs.length;
+  const glyphs = generated.length ? generated : [];
 
   const redraw = () => {
     const canvas = canvasRef.current;
@@ -210,8 +227,18 @@ export default function KanjiWorksheet() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    drawGrid(ctx, canvas.width, canvas.height, cols, rows);
-    drawFaintKanji(ctx, glyphs, canvas.width, canvas.height, cols, rows);
+    drawWorksheetBase(ctx, canvas.width, canvas.height);
+    if (glyphs.length === 0) {
+      ctx.save();
+      ctx.fillStyle = "#94A3B8";
+      ctx.font = "500 14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Nhập Kanji hoặc chọn chủ đề", canvas.width / 2, canvas.height / 2 - 10);
+      ctx.fillText("rồi bấm “Tạo Worksheet” để xem trước.", canvas.width / 2, canvas.height / 2 + 14);
+      ctx.restore();
+    } else {
+      drawWorksheetRows(ctx, canvas.width, canvas.height, glyphs);
+    }
     drawStrokes(ctx, strokes);
   };
 
@@ -312,15 +339,31 @@ export default function KanjiWorksheet() {
     if (!t) return;
     setSelectedTopic(topicId);
     setInput(t.kanji.slice(0, MAX_KANJI));
-    setStrokes([]);
+    setGenerated([]);
   };
 
   const handleClear = () => setStrokes([]);
   const handleUndo = () => setStrokes((prev) => prev.slice(0, -1));
-  const handleReset = () => {
+  const handleResetAll = () => {
     setInput("");
     setSelectedTopic(null);
+    setGenerated([]);
     setStrokes([]);
+  };
+
+  const handleGenerate = () => {
+    setGenerated(inputGlyphs.slice(0, MAX_ROWS));
+    setStrokes([]);
+  };
+
+  const handleCopy = async () => {
+    const text = inputGlyphs.join("");
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore
+    }
   };
 
   const exportPdf = () => {
@@ -343,27 +386,9 @@ export default function KanjiWorksheet() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-3xl font-bold font-jp">Kanji Worksheet</h1>
-            <p className="text-sm text-muted-foreground">Tạo bảng tập viết Kanji dạng A4 và viết trực tiếp bằng chuột.</p>
-          </div>
-          <div className="hidden md:flex items-center gap-2">
-            <button
-              onClick={handleReset}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted text-sm"
-              type="button"
-            >
-              <RotateCcw size={16} /> Làm lại
-            </button>
-            <button
-              onClick={exportPdf}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:opacity-90"
-              type="button"
-            >
-              <Download size={16} /> Tải PDF
-            </button>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold font-jp">Kanji Worksheet</h1>
+          <p className="text-sm text-muted-foreground">Tạo worksheet A4 và luyện viết trực tiếp bằng chuột.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -374,7 +399,7 @@ export default function KanjiWorksheet() {
                 <label className="text-sm font-semibold">Nhập Kanji (tối đa {MAX_KANJI} ký tự)</label>
                 <span className="text-xs text-muted-foreground">{count}/{MAX_KANJI}</span>
               </div>
-              <input
+              <textarea
                 value={input}
                 onChange={(e) => {
                   const next = sanitizeKanjiInput(e.target.value);
@@ -382,11 +407,37 @@ export default function KanjiWorksheet() {
                   const g = splitGlyphs(next);
                   setInput(g.join(""));
                   setSelectedTopic(null);
+                  setGenerated([]);
                 }}
                 placeholder="Ví dụ: 山川花木"
-                className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-ring focus:outline-none font-jp text-lg"
+                rows={3}
+                className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-ring focus:outline-none font-jp text-lg resize-none"
               />
-              <p className="text-xs text-muted-foreground mt-2">Mẹo: bạn có thể copy Kanji từ bài học/flashcard rồi dán vào đây.</p>
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={inputGlyphs.length === 0}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl gradient-bg text-primary-foreground font-semibold disabled:opacity-60"
+                >
+                  <Wand2 size={18} /> Tạo Worksheet
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetAll}
+                  className="px-4 py-3 rounded-xl border hover:bg-muted text-sm"
+                  title="Làm lại"
+                >
+                  <RefreshCcw size={18} />
+                </button>
+              </div>
+              <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                <button type="button" onClick={handleCopy} className="inline-flex items-center gap-1.5 hover:text-foreground">
+                  <Copy size={14} /> Copy Kanji
+                </button>
+                <span>•</span>
+                <span>Mẹo: dán Kanji từ bài học/flashcard</span>
+              </div>
             </div>
 
             <div className="glass-card p-6 border rounded-2xl">
@@ -438,23 +489,6 @@ export default function KanjiWorksheet() {
                 Bạn viết trực tiếp lên phần xem trước. Nét viết sẽ được giữ và **tải kèm trong PDF**.
               </p>
             </div>
-
-            <div className="md:hidden flex gap-2">
-              <button
-                onClick={handleReset}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted text-sm"
-                type="button"
-              >
-                <RotateCcw size={16} /> Làm lại
-              </button>
-              <button
-                onClick={exportPdf}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-medium hover:opacity-90"
-                type="button"
-              >
-                <Download size={16} /> Tải PDF
-              </button>
-            </div>
           </div>
 
           {/* Right: preview */}
@@ -464,8 +498,18 @@ export default function KanjiWorksheet() {
             className="glass-card p-6 border rounded-2xl"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">Xem trước Worksheet</h2>
-              <span className="text-xs text-muted-foreground">A4</span>
+              <div>
+                <h2 className="font-semibold">Xem trước Worksheet</h2>
+                <p className="text-xs text-muted-foreground">A4 WORKSHEET</p>
+              </div>
+              <button
+                type="button"
+                onClick={exportPdf}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl gradient-bg text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                disabled={glyphs.length === 0}
+              >
+                <Download size={16} /> Tải PDF
+              </button>
             </div>
             <div className="rounded-xl border bg-white p-3 overflow-hidden">
               <canvas
@@ -474,9 +518,7 @@ export default function KanjiWorksheet() {
                 aria-label="Kanji worksheet canvas"
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              Nếu bạn muốn “mỗi Kanji 1 dòng nhiều ô” giống worksheet chuyên nghiệp hơn, mình sẽ nâng cấp layout tiếp.
-            </p>
+            <p className="text-xs text-muted-foreground mt-3">Bấm “Tạo Worksheet” để tạo hàng ô cho từng Kanji.</p>
           </motion.div>
         </div>
       </div>
