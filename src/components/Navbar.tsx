@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, Home, Layers, HelpCircle, FileText, MessageSquare, MessageCircle, User, Shield, Trophy, Menu, X, Moon, Sun } from 'lucide-react';
+import { BookOpen, Home, Layers, HelpCircle, FileText, MessageSquare, MessageCircle, User, Shield, Trophy, Menu, X, Moon, Sun, PenTool } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 
@@ -10,6 +10,7 @@ const navItems = [
   { path: '/flashcards', label: 'Flashcards', icon: BookOpen },
   { path: '/lessons', label: 'Bài học', icon: BookOpen },
   { path: '/quiz', label: 'Quiz', icon: HelpCircle },
+  { path: '/kanji', label: 'Kanji', icon: PenTool },
   { path: '/materials', label: 'Tài liệu', icon: FileText },
   { path: '/forum', label: 'Diễn đàn', icon: MessageSquare },
   { path: '/chat', label: 'Chat', icon: MessageCircle },

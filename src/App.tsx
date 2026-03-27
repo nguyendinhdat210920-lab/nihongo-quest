@@ -25,6 +25,7 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
+const KanjiWorksheet = lazy(() => import("./pages/KanjiWorksheet"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -71,6 +72,7 @@ const AppRoutes = () => {
         <Route path="/materials" element={<ProtectedRoute><Materials /></ProtectedRoute>} />
         <Route path="/forum" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+        <Route path="/kanji" element={<ProtectedRoute><KanjiWorksheet /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
         <Route path="/leaderboard" element={<Leaderboard />} />

@@ -24,16 +24,13 @@ import {
 } from "lucide-react";
 import { currentUser } from "@/lib/mockData";
 
-/** Lấy URL file qua API hiện tại (tránh domain cũ) */
+/** Lấy URL file để xem/tải (ưu tiên Supabase, còn lại đi qua API download) */
 const getFileViewUrl = (url: string | null): string => {
   if (!url) return "";
   if (url.includes("supabase.co/storage")) return url;
-  try {
-    const pathname = new URL(url).pathname || url;
-    return apiUrl(pathname.startsWith("/") ? pathname : `/${pathname}`);
-  } catch {
-    return url.startsWith("/") ? apiUrl(url) : apiUrl(`/${url}`);
-  }
+  // File lưu trên server cũ (/uploads/...) → đi qua API download để tránh 404
+  const src = encodeURIComponent(url);
+  return `${apiUrl("/api/files/download")}?src=${src}`;
 };
 import { speakText } from "@/lib/speakText";
 
@@ -274,7 +271,7 @@ export default function Lessons() {
                     <Eye size={18} /> Xem tệp đính kèm
                   </a>
                   <a
-                    href={`${apiUrl("/api/files/download")}?src=${encodeURIComponent(getFileViewUrl(selectedLesson.AttachmentUrl))}`}
+                    href={getFileViewUrl(selectedLesson.AttachmentUrl)}
                     download
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted text-sm"
                   >
