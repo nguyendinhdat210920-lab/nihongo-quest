@@ -5,7 +5,7 @@ import { jsPDF } from "jspdf";
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[] };
-type StrokeDiagram = { count: number; icons: HTMLImageElement[] };
+type StrokeDiagram = { count: number; icons: HTMLImageElement[]; completeIcon: HTMLImageElement | null };
 
 const MAX_KANJI = 10;
 const MAX_ROWS = 10;
@@ -88,6 +88,19 @@ const buildStrokeIconSvg = (viewBox: string, allPaths: string[], currentIndex: n
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="${escapeXml(viewBox)}">
   ${prev}
   ${curr}
+</svg>`;
+};
+
+const buildCompleteIconSvg = (viewBox: string, allPaths: string[]) => {
+  const all = allPaths
+    .map(
+      (d) =>
+        `<path d="${escapeXml(d)}" fill="none" stroke="#0F172A" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
+    )
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="${escapeXml(viewBox)}">
+  ${all}
 </svg>`;
 };
 
@@ -260,7 +273,7 @@ function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[]) {
 }
 
 export default function KanjiWorksheet() {
-  const [input, setInput] = useState("今玉交合歩茶弓雲算小");
+  const [input, setInput] = useState("");
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string[]>([]);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -329,6 +342,14 @@ export default function KanjiWorksheet() {
         const maxIcons = Math.min(6, diag.icons.length);
         for (let i = 0; i < maxIcons; i++) {
           const img = diag.icons[i];
+          // small box per stroke
+          ctx.save();
+          ctx.fillStyle = "#FFFFFF";
+          ctx.strokeStyle = "#CBD5E1";
+          ctx.lineWidth = 1;
+          ctx.fillRect(x - 1, yy - 1, iconSize + 2, iconSize + 2);
+          ctx.strokeRect(x - 1, yy - 1, iconSize + 2, iconSize + 2);
+          ctx.restore();
           try {
             ctx.drawImage(img, x, yy, iconSize, iconSize);
           } catch {
@@ -345,6 +366,30 @@ export default function KanjiWorksheet() {
         ctx.textBaseline = "middle";
         ctx.fillText(`(${diag.count} nét)`, x + 4, yy + iconSize / 2);
         ctx.restore();
+
+        // Show completed kanji in a final box for easy understanding
+        if (diag.completeIcon) {
+          const doneX = x + 66;
+          ctx.save();
+          ctx.fillStyle = "#FFFFFF";
+          ctx.strokeStyle = "#94A3B8";
+          ctx.lineWidth = 1.2;
+          ctx.fillRect(doneX - 1, yy - 1, iconSize + 2, iconSize + 2);
+          ctx.strokeRect(doneX - 1, yy - 1, iconSize + 2, iconSize + 2);
+          ctx.restore();
+          try {
+            ctx.drawImage(diag.completeIcon, doneX, yy, iconSize, iconSize);
+          } catch {
+            // ignore
+          }
+          ctx.save();
+          ctx.fillStyle = "#64748B";
+          ctx.font = `600 ${Math.max(9, Math.floor(iconSize * 0.8))}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.fillText("Hoàn chỉnh", doneX + iconSize + 6, yy + iconSize / 2);
+          ctx.restore();
+        }
       }
     }
 
@@ -433,10 +478,27 @@ export default function KanjiWorksheet() {
           })
         );
 
+        const completeIcon = await new Promise<HTMLImageElement | null>((resolve) => {
+          const svg = buildCompleteIconSvg(parsed.viewBox, pathDs);
+          const blob = new Blob([svg], { type: "image/svg+xml" });
+          const blobUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          img.decoding = "async";
+          img.onload = () => {
+            URL.revokeObjectURL(blobUrl);
+            resolve(img);
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(blobUrl);
+            resolve(null);
+          };
+          img.src = blobUrl;
+        });
+
         if (cancelled) return;
         const finalIcons = icons.filter((x): x is HTMLImageElement => !!x);
         // Keep icons in correct order
-        strokeDiagramCacheRef.current.set(ch, { count: total, icons: finalIcons });
+        strokeDiagramCacheRef.current.set(ch, { count: total, icons: finalIcons, completeIcon });
         setStrokeImgTick((x) => x + 1);
       } catch {
         // ignore
