@@ -5,6 +5,7 @@ import { jsPDF } from "jspdf";
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[] };
+type StrokeDiagram = { count: number; icons: HTMLImageElement[] };
 
 const MAX_KANJI = 10;
 const MAX_ROWS = 10;
@@ -42,6 +43,43 @@ const toKanjiVgHex = (ch: string) => {
   if (!cp) return null;
   // KanjiVG uses 5-digit lowercase hex (e.g., 04e00.svg)
   return cp.toString(16).padStart(5, "0");
+};
+
+const escapeXml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const extractStrokePaths = (svgText: string): { viewBox: string; paths: { d: string; n: number }[] } | null => {
+  try {
+    const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+    const svg = doc.querySelector("svg");
+    if (!svg) return null;
+    const viewBox = svg.getAttribute("viewBox") || "0 0 109 109";
+
+    const paths: { d: string; n: number }[] = [];
+    const all = Array.from(doc.querySelectorAll("path"));
+    for (const p of all) {
+      const d = p.getAttribute("d");
+      if (!d) continue;
+      const id = p.getAttribute("id") || "";
+      const m = /-s(\d+)$/.exec(id);
+      const n = m ? Number(m[1]) : NaN;
+      // KanjiVG stroke paths have -sN suffix; ignore other helper paths
+      if (!Number.isFinite(n)) continue;
+      paths.push({ d, n });
+    }
+    paths.sort((a, b) => a.n - b.n);
+    return { viewBox, paths };
+  } catch {
+    return null;
+  }
+};
+
+const buildStrokeIconSvg = (viewBox: string, d: string, stroke: string) => {
+  // Minimal SVG for a single stroke icon
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="${escapeXml(viewBox)}">
+  <path d="${escapeXml(d)}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
 };
 
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent) {
@@ -225,8 +263,8 @@ export default function KanjiWorksheet() {
   const suggestAbortRef = useRef<AbortController | null>(null);
   const suggestTimerRef = useRef<number | null>(null);
 
-  // Stroke order diagram cache (KanjiVG SVG rendered to <img>)
-  const strokeImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  // Stroke order icon cache (KanjiVG parsed -> per-stroke icons)
+  const strokeDiagramCacheRef = useRef<Map<string, StrokeDiagram>>(new Map());
   const [strokeImgTick, setStrokeImgTick] = useState(0);
 
   const inputGlyphs = useMemo(() => splitGlyphs(sanitizeKanjiInput(input)), [input]);
@@ -252,7 +290,7 @@ export default function KanjiWorksheet() {
       drawWorksheetRows(ctx, canvas.width, canvas.height, glyphs);
     }
 
-    // Stroke order diagrams (draw on top, small, above each row)
+    // Stroke order row header like screenshot (icons + "(x nét)")
     if (glyphs.length > 0) {
       const padding = 28;
       const topY = padding + 92;
@@ -266,19 +304,34 @@ export default function KanjiWorksheet() {
 
       for (let r = 0; r < rows; r++) {
         const ch = glyphs[r];
-        const img = strokeImgCacheRef.current.get(ch);
-        if (!img) continue;
-        // place in a small box above row grid, left-aligned
+        const diag = strokeDiagramCacheRef.current.get(ch);
+        if (!diag || !diag.icons.length) continue;
+
         const y = topY + r * (rowH + rowGap);
-        const boxH = Math.max(18, Math.floor(rowH * 0.55));
-        const boxW = boxH;
-        const x = gridX + 6;
-        const yy = Math.max(padding + 78, y - boxH - 6);
-        try {
-          ctx.drawImage(img, x, yy, boxW, boxH);
-        } catch {
-          // ignore draw errors
+        const iconSize = Math.max(16, Math.floor(rowH * 0.38));
+        const yy = Math.max(padding + 78, y - iconSize - 6);
+        let x = gridX + 6;
+
+        // icons for first strokes
+        const maxIcons = Math.min(6, diag.icons.length);
+        for (let i = 0; i < maxIcons; i++) {
+          const img = diag.icons[i];
+          try {
+            ctx.drawImage(img, x, yy, iconSize, iconSize);
+          } catch {
+            // ignore
+          }
+          x += iconSize + 6;
         }
+
+        // (x nét)
+        ctx.save();
+        ctx.fillStyle = "#64748B";
+        ctx.font = `600 ${Math.max(10, Math.floor(iconSize * 0.55))}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`(${diag.count} nét)`, x + 4, yy + iconSize / 2);
+        ctx.restore();
       }
     }
 
@@ -318,9 +371,9 @@ export default function KanjiWorksheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [strokes, glyphs.join("|"), strokeImgTick]);
 
-  // Fetch Kanji stroke order SVGs (KanjiVG) for current glyphs
+  // Fetch Kanji stroke order (KanjiVG) and build per-stroke icons
   useEffect(() => {
-    const needed = glyphs.filter((g) => !strokeImgCacheRef.current.has(g));
+    const needed = glyphs.filter((g) => !strokeDiagramCacheRef.current.has(g));
     if (!needed.length) return;
 
     let cancelled = false;
@@ -337,20 +390,42 @@ export default function KanjiWorksheet() {
         if (!resp.ok) return;
         const svg = await resp.text();
         if (cancelled) return;
-        const blob = new Blob([svg], { type: "image/svg+xml" });
-        const blobUrl = URL.createObjectURL(blob);
-        const img = new Image();
-        img.decoding = "async";
-        img.onload = () => {
-          URL.revokeObjectURL(blobUrl);
-          if (cancelled) return;
-          strokeImgCacheRef.current.set(ch, img);
-          setStrokeImgTick((x) => x + 1);
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(blobUrl);
-        };
-        img.src = blobUrl;
+
+        const parsed = extractStrokePaths(svg);
+        if (!parsed) return;
+        const total = parsed.paths.length;
+        if (!total) return;
+
+        // Build icons: one per stroke (up to 10 kept in cache)
+        const icons: HTMLImageElement[] = [];
+        const toBuild = Math.min(total, 10);
+
+        await Promise.all(
+          parsed.paths.slice(0, toBuild).map((p) => {
+            return new Promise<void>((resolve) => {
+              const iconSvg = buildStrokeIconSvg(parsed.viewBox, p.d, "#EF4444");
+              const blob = new Blob([iconSvg], { type: "image/svg+xml" });
+              const blobUrl = URL.createObjectURL(blob);
+              const img = new Image();
+              img.decoding = "async";
+              img.onload = () => {
+                URL.revokeObjectURL(blobUrl);
+                if (!cancelled) icons.push(img);
+                resolve();
+              };
+              img.onerror = () => {
+                URL.revokeObjectURL(blobUrl);
+                resolve();
+              };
+              img.src = blobUrl;
+            });
+          })
+        );
+
+        if (cancelled) return;
+        // Keep icons in correct order
+        strokeDiagramCacheRef.current.set(ch, { count: total, icons });
+        setStrokeImgTick((x) => x + 1);
       } catch {
         // ignore
       }
