@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { motion } from "framer-motion";
 import { Copy, Download, Eraser, RefreshCcw, Sparkles, Undo2, Wand2 } from "lucide-react";
 import { jsPDF } from "jspdf";
@@ -266,11 +266,23 @@ export default function KanjiWorksheet() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
+  /** Đã gọi Jisho xong cho lần gõ hiện tại (để hiện “Không có gợi ý”, tránh nháy khi đang debounce) */
+  const [suggestFetched, setSuggestFetched] = useState(false);
+  /** Textarea đang focus → cho phép hiện hộp gợi ý */
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  /** Dòng đang highlight trong dropdown (giống IME chọn ↑↓) */
+  const [suggestActiveIndex, setSuggestActiveIndex] = useState(0);
+  /** IME hệ thống đang gõ dở — không hiện dropdown / không bắt phím của chúng ta */
+  const [isComposing, setIsComposing] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const currentStroke = useRef<Stroke | null>(null);
   const suggestAbortRef = useRef<AbortController | null>(null);
   const suggestTimerRef = useRef<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const suggestListRef = useRef<HTMLDivElement | null>(null);
+  /** Ref đồng bộ với composition (keydown đọc ngay, không chờ re-render) */
+  const isComposingRef = useRef(false);
 
   // Stroke order icon cache (KanjiVG parsed -> per-stroke icons)
   const strokeDiagramCacheRef = useRef<Map<string, StrokeDiagram>>(new Map());
@@ -577,15 +589,17 @@ export default function KanjiWorksheet() {
     pdf.save(`kanji-worksheet-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  // Kanji suggestions from Jisho (works for kana/kanji queries)
+  // Kanji suggestions from Jisho — query = input.trim() (romaji / hỗn hợp OK)
   useEffect(() => {
     const q = input.trim();
     if (!q) {
       setSuggestions([]);
+      setSuggestFetched(false);
       return;
     }
 
-    // Debounce
+    setSuggestFetched(false);
+
     if (suggestTimerRef.current) window.clearTimeout(suggestTimerRef.current);
     suggestTimerRef.current = window.setTimeout(async () => {
       try {
@@ -594,7 +608,6 @@ export default function KanjiWorksheet() {
         suggestAbortRef.current = ac;
         setSuggestLoading(true);
 
-        // Query last token (use full string, but keep it short)
         const keyword = encodeURIComponent(q.slice(-20));
         const resp = await fetch(`https://jisho.org/api/v1/search/words?keyword=${keyword}`, { signal: ac.signal });
         if (!resp.ok) throw new Error("bad response");
@@ -614,6 +627,7 @@ export default function KanjiWorksheet() {
         setSuggestions([]);
       } finally {
         setSuggestLoading(false);
+        setSuggestFetched(true);
       }
     }, 350);
 
@@ -622,13 +636,77 @@ export default function KanjiWorksheet() {
     };
   }, [input]);
 
+  // Mỗi lần danh sách gợi ý mới → chọn dòng đầu (giống IME)
+  useEffect(() => {
+    setSuggestActiveIndex(suggestions.length > 0 ? 0 : -1);
+  }, [suggestions]);
+
+  // Giữ dòng highlight trong vùng cuộn
+  useEffect(() => {
+    if (suggestActiveIndex < 0 || !suggestListRef.current) return;
+    const row = suggestListRef.current.querySelector(`[data-suggest-index="${suggestActiveIndex}"]`);
+    row?.scrollIntoView({ block: "nearest" });
+  }, [suggestActiveIndex, suggestions]);
+
+  /** Chọn một gợi ý: chỉ lúc này mới lọc / giới hạn 10 ký tự tiếng Nhật */
   const applySuggestion = (s: string) => {
-    // Insert suggestion as full content (simpler + predictable)
     const g = extractWorksheetGlyphs(s);
     setInput(g.join(""));
     setSelectedTopic(null);
     setGenerated([]);
     setStrokes([]);
+    setSuggestOpen(false);
+    setSuggestActiveIndex(0);
+    textareaRef.current?.focus();
+  };
+
+  const showSuggestPanel =
+    suggestOpen &&
+    Boolean(input.trim()) &&
+    !isComposing &&
+    (suggestLoading || suggestions.length > 0 || suggestFetched);
+
+  /** Điều khiển dropdown bằng phím — bỏ qua khi IME hệ thống đang composition */
+  const handleTextareaKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isComposingRef.current || e.nativeEvent.isComposing) return;
+
+    if (e.key === "Escape") {
+      if (showSuggestPanel) {
+        e.preventDefault();
+        setSuggestOpen(false);
+        setSuggestActiveIndex(-1);
+      }
+      return;
+    }
+
+    if (!showSuggestPanel || suggestLoading || suggestions.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSuggestActiveIndex((i) => {
+        const cur = i < 0 ? 0 : i;
+        return Math.min(cur + 1, suggestions.length - 1);
+      });
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSuggestActiveIndex((i) => {
+        const cur = i < 0 ? 0 : i;
+        return Math.max(cur - 1, 0);
+      });
+      return;
+    }
+
+    if (e.key === "Enter") {
+      const idx = suggestActiveIndex >= 0 ? suggestActiveIndex : 0;
+      const word = suggestions[idx];
+      if (word) {
+        e.preventDefault();
+        applySuggestion(word);
+      }
+    }
   };
 
   return (
@@ -647,37 +725,83 @@ export default function KanjiWorksheet() {
                 <label className="text-sm font-semibold">Nhập Kanji (tối đa {MAX_KANJI} ký tự)</label>
                 <span className="text-xs text-muted-foreground">{count}/{MAX_KANJI}</span>
               </div>
-              <textarea
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  setSelectedTopic(null);
-                  setGenerated([]);
-                }}
-                placeholder="Ví dụ: 山川花木"
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-ring focus:outline-none font-jp text-lg resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => {
+                    // Không sanitize — lưu đúng chuỗi user gõ (romaji / IME / văn bản tự do)
+                    setInput(e.target.value);
+                    setSelectedTopic(null);
+                    setGenerated([]);
+                    setSuggestOpen(true);
+                  }}
+                  onKeyDown={handleTextareaKeyDown}
+                  onFocus={() => setSuggestOpen(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setSuggestOpen(false), 120);
+                  }}
+                  onCompositionStart={() => {
+                    isComposingRef.current = true;
+                    setIsComposing(true);
+                  }}
+                  onCompositionEnd={() => {
+                    isComposingRef.current = false;
+                    setIsComposing(false);
+                  }}
+                  placeholder="Ví dụ: gõ wa → chọn 和 / わ… hoặc dán 山川花木"
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-ring focus:outline-none font-jp text-lg resize-none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
 
-              {/* Suggestions bar */}
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-muted-foreground">Gợi ý:</span>
-                {suggestLoading && <span className="text-xs text-muted-foreground">đang tìm…</span>}
-                {!suggestLoading && suggestions.length === 0 && (
-                  <span className="text-xs text-muted-foreground">gõ hira/kata/kanji để xem gợi ý</span>
-                )}
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => applySuggestion(s)}
-                    className="px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm font-jp"
-                    title="Chọn gợi ý"
+                {/* Dropdown gợi ý kiểu IME — Jisho, bên dưới textarea */}
+                {showSuggestPanel && (
+                  <div
+                    className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-neutral-200 bg-white shadow-md"
+                    role="listbox"
+                    aria-label="Gợi ý từ"
                   >
-                    {s}
-                  </button>
-                ))}
+                    {suggestLoading && (
+                      <div className="px-3 py-2 text-sm text-neutral-500">Đang tìm…</div>
+                    )}
+                    {!suggestLoading && suggestions.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-neutral-500">Không có gợi ý</div>
+                    )}
+                    {!suggestLoading && suggestions.length > 0 && (
+                      <div ref={suggestListRef} className="max-h-56 overflow-y-auto rounded-lg py-1">
+                        {suggestions.map((s, idx) => {
+                          const active = idx === suggestActiveIndex;
+                          return (
+                            <button
+                              key={`${s}-${idx}`}
+                              type="button"
+                              data-suggest-index={idx}
+                              role="option"
+                              aria-selected={active}
+                              className={`flex w-full px-3 py-2 text-left text-base font-jp text-neutral-900 transition-colors ${
+                                active ? "bg-neutral-200" : "bg-white hover:bg-neutral-100"
+                              }`}
+                              onMouseEnter={() => setSuggestActiveIndex(idx)}
+                              onMouseDown={(ev) => {
+                                ev.preventDefault();
+                                applySuggestion(s);
+                              }}
+                            >
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                Gợi ý: ↑ ↓ chọn dòng, Enter chọn, Esc đóng. IME hệ thống: gõ bình thường, không chặn composition.
+              </p>
 
               <div className="mt-4 flex gap-3">
                 <button
