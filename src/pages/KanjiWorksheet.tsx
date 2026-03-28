@@ -22,16 +22,15 @@ const TOPICS: { id: string; label: string; kanji: string }[] = [
   { id: "edu-n4", label: "Giáo dục N4", kanji: "学教書試験宿題" },
 ];
 
-const sanitizeKanjiInput = (s: string) => {
-  // Keep CJK + kana + spaces. Do NOT over-normalize here; IME composition needs raw value.
-  return String(s || "").replace(/[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\s]/g, "");
-};
+/** Hira / Kata / Kanji — dùng khi tạo worksheet, đếm giới hạn 10 ký tự */
+const isJapaneseChar = (ch: string) =>
+  /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(ch);
 
-const splitGlyphs = (s: string) => {
-  // Split into codepoints; treat spaces as separators
+/** Lấy chuỗi chỉ gồm ký tự tiếng Nhật (tối đa MAX_KANJI) để worksheet — KHÔNG strip ô nhập khi đang gõ romaji */
+const extractWorksheetGlyphs = (s: string) => {
   const out: string[] = [];
   for (const ch of s) {
-    if (ch.trim() === "") continue;
+    if (!isJapaneseChar(ch)) continue;
     out.push(ch);
     if (out.length >= MAX_KANJI) break;
   }
@@ -265,7 +264,6 @@ export default function KanjiWorksheet() {
   const [generated, setGenerated] = useState<string[]>([]);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [isComposing, setIsComposing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
 
@@ -278,8 +276,8 @@ export default function KanjiWorksheet() {
   const strokeDiagramCacheRef = useRef<Map<string, StrokeDiagram>>(new Map());
   const [strokeImgTick, setStrokeImgTick] = useState(0);
 
-  const inputGlyphs = useMemo(() => splitGlyphs(sanitizeKanjiInput(input)), [input]);
-  const count = inputGlyphs.length;
+  const worksheetGlyphs = useMemo(() => extractWorksheetGlyphs(input), [input]);
+  const count = worksheetGlyphs.length;
   const glyphs = generated.length ? generated : [];
 
   const redraw = () => {
@@ -548,12 +546,12 @@ export default function KanjiWorksheet() {
   };
 
   const handleGenerate = () => {
-    setGenerated(inputGlyphs.slice(0, MAX_ROWS));
+    setGenerated(worksheetGlyphs.slice(0, MAX_ROWS));
     setStrokes([]);
   };
 
   const handleCopy = async () => {
-    const text = inputGlyphs.join("");
+    const text = worksheetGlyphs.join("");
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -581,8 +579,7 @@ export default function KanjiWorksheet() {
 
   // Kanji suggestions from Jisho (works for kana/kanji queries)
   useEffect(() => {
-    if (isComposing) return;
-    const q = sanitizeKanjiInput(input).trim();
+    const q = input.trim();
     if (!q) {
       setSuggestions([]);
       return;
@@ -623,11 +620,11 @@ export default function KanjiWorksheet() {
     return () => {
       if (suggestTimerRef.current) window.clearTimeout(suggestTimerRef.current);
     };
-  }, [input, isComposing]);
+  }, [input]);
 
   const applySuggestion = (s: string) => {
     // Insert suggestion as full content (simpler + predictable)
-    const g = splitGlyphs(sanitizeKanjiInput(s));
+    const g = extractWorksheetGlyphs(s);
     setInput(g.join(""));
     setSelectedTopic(null);
     setGenerated([]);
@@ -653,24 +650,9 @@ export default function KanjiWorksheet() {
               <textarea
                 value={input}
                 onChange={(e) => {
-                  const nextRaw = e.target.value;
-                  // IMPORTANT: do not mutate during IME composition
-                  if (isComposing) {
-                    setInput(nextRaw);
-                    return;
-                  }
-                  const next = sanitizeKanjiInput(nextRaw);
-                  const g = splitGlyphs(next);
-                  setInput(g.join(""));
+                  setInput(e.target.value);
                   setSelectedTopic(null);
                   setGenerated([]);
-                }}
-                onCompositionStart={() => setIsComposing(true)}
-                onCompositionEnd={(e) => {
-                  setIsComposing(false);
-                  const next = sanitizeKanjiInput((e.target as HTMLTextAreaElement).value);
-                  const g = splitGlyphs(next);
-                  setInput(g.join(""));
                 }}
                 placeholder="Ví dụ: 山川花木"
                 rows={3}
@@ -701,7 +683,7 @@ export default function KanjiWorksheet() {
                 <button
                   type="button"
                   onClick={handleGenerate}
-                  disabled={inputGlyphs.length === 0}
+                  disabled={worksheetGlyphs.length === 0}
                   className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl gradient-bg text-primary-foreground font-semibold disabled:opacity-60"
                 >
                   <Wand2 size={18} /> Tạo Worksheet
