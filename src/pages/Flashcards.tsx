@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen,
@@ -21,6 +22,8 @@ import axios from "axios";
 import { currentUser } from "@/lib/mockData";
 import { apiUrl } from "@/lib/api";
 import { speakText, parseFrontDisplay } from "@/lib/speakText";
+import FlashcardLearningMode from "@/components/flashcards/FlashcardLearningMode";
+import FlashcardTestMode from "@/components/flashcards/FlashcardTestMode";
 
 interface Deck {
   id: number;
@@ -29,6 +32,9 @@ interface Deck {
   ownerName: string;
   jlptLevel: string;
   isPublic: boolean;
+  /** Bộ của chương trình (chỉ admin gắn cờ) */
+  isOfficial?: boolean;
+  shareToken?: string | null;
   cardCount: number;
   createdAt: string;
 }
@@ -40,12 +46,21 @@ interface Card {
   back: string;
   example: string;
   learned: boolean;
+  hiragana?: string;
+  /** Đáp án nhiễu (nghĩa sai) cho trắc nghiệm — lưu 1 lần, dùng nhiều chế độ */
+  choices?: string[];
 }
 
+type DeckMainTab = "memo" | "learn" | "test";
+
 export default function Flashcards() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
+  /** Mở deck qua link chia sẻ → chỉ xem/học/test, không sửa */
+  const [openedViaShare, setOpenedViaShare] = useState(false);
+  const [deckMainTab, setDeckMainTab] = useState<DeckMainTab>("memo");
   const [currentCard, setCurrentCard] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [search, setSearch] = useState("");
@@ -59,6 +74,8 @@ export default function Flashcards() {
   const [deckDesc, setDeckDesc] = useState("");
   const [deckJlpt, setDeckJlpt] = useState("N5");
   const [deckPublic, setDeckPublic] = useState(true);
+  /** Chỉ admin: đánh dấu bộ thẻ chính thức (chương trình học) */
+  const [deckOfficial, setDeckOfficial] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [showCardForm, setShowCardForm] = useState(false);
@@ -66,6 +83,10 @@ export default function Flashcards() {
   const [cardKanji, setCardKanji] = useState("");
   const [cardBack, setCardBack] = useState("");
   const [cardExample, setCardExample] = useState("");
+  /** Hiragana rõ ràng (tuỳ chọn; nếu trống vẫn parse từ mặt trước) */
+  const [cardHiraganaExtra, setCardHiraganaExtra] = useState("");
+  /** Mỗi dòng = 1 đáp án nhiễu (nghĩa sai) cho MCQ */
+  const [cardWrongLines, setCardWrongLines] = useState("");
 
   const [viewMode, setViewMode] = useState<"study" | "list">("study");
   const [studyFilter, setStudyFilter] = useState<"all" | "needReview">("all");
@@ -76,6 +97,8 @@ export default function Flashcards() {
   const [editKanji, setEditKanji] = useState("");
   const [editBack, setEditBack] = useState("");
   const [editExample, setEditExample] = useState("");
+  const [editHiraganaExtra, setEditHiraganaExtra] = useState("");
+  const [editWrongLines, setEditWrongLines] = useState("");
 
   const activeUser =
     (typeof window !== "undefined" && localStorage.getItem("username")) ||
@@ -87,7 +110,8 @@ export default function Flashcards() {
       setLoading(true);
       setError(null);
       const params: Record<string, string> = {};
-      if (showOnlyMine && activeUser) params.username = activeUser;
+      if (activeUser) params.username = activeUser;
+      if (showOnlyMine) params.mineOnly = "1";
       const res = await axios.get<Deck[]>(
         apiUrl("/api/flashcards/decks"),
         { params }
@@ -110,6 +134,39 @@ export default function Flashcards() {
   useEffect(() => {
     fetchDecks();
   }, [showOnlyMine]);
+
+  const shareTokenParam = searchParams.get("share");
+
+  /** Mở deck từ link ?share=... (học / kiểm tra, không chỉnh sửa) */
+  useEffect(() => {
+    const token = shareTokenParam?.trim();
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await axios.get<{ deck: Deck; cards: Card[] }>(
+          apiUrl(`/api/flashcards/shared/${encodeURIComponent(token)}`)
+        );
+        if (cancelled) return;
+        setSelectedDeck(res.data.deck);
+        setCards(res.data.cards);
+        setOpenedViaShare(true);
+        setDeckMainTab("memo");
+        setCurrentCard(0);
+        setFlipped(false);
+        setViewMode("study");
+      } catch {
+        if (!cancelled) setError("Link chia sẻ không hợp lệ.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shareTokenParam]);
 
   useEffect(() => {
     const needReview = cards.filter((c) => !c.learned);
@@ -154,6 +211,8 @@ export default function Flashcards() {
       );
       setSelectedDeck(res.data.deck);
       setCards(res.data.cards);
+      setOpenedViaShare(false);
+      setDeckMainTab("memo");
       setCurrentCard(0);
       setFlipped(false);
     } catch (err) {
@@ -177,6 +236,7 @@ export default function Flashcards() {
           description: deckDesc.trim(),
           jlptLevel: deckJlpt,
           isPublic: deckPublic,
+          ...(isAdmin ? { isOfficial: deckOfficial } : {}),
         },
         { headers: { "x-user": encodeURIComponent(activeUser) } }
       );
@@ -184,6 +244,7 @@ export default function Flashcards() {
       setDeckDesc("");
       setDeckJlpt("N5");
       setDeckPublic(true);
+      setDeckOfficial(false);
       setShowDeckForm(false);
       fetchDecks();
     } catch (err: unknown) {
@@ -225,18 +286,30 @@ export default function Flashcards() {
     e.preventDefault();
     if (!selectedDeck || !cardFront.trim() || !cardBack.trim()) return;
     const front = cardKanji.trim() ? `${cardKanji.trim()}（${cardFront.trim()}）` : cardFront.trim();
+    const choices = cardWrongLines
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
     try {
       setSubmitting(true);
       setError(null);
       await axios.post(
         apiUrl(`/api/flashcards/decks/${selectedDeck.id}/cards`),
-        { front, back: cardBack.trim(), example: cardExample.trim() },
+        {
+          front,
+          back: cardBack.trim(),
+          example: cardExample.trim(),
+          hiragana: cardHiraganaExtra.trim() || undefined,
+          choices: choices.length ? choices : undefined,
+        },
         { headers: { "x-user": encodeURIComponent(activeUser) } }
       );
       setCardFront("");
       setCardKanji("");
       setCardBack("");
       setCardExample("");
+      setCardHiraganaExtra("");
+      setCardWrongLines("");
       setShowCardForm(false);
       fetchDeckWithCards(selectedDeck.id);
     } catch (err) {
@@ -267,9 +340,19 @@ export default function Flashcards() {
     const front = editKanji.trim() ? `${editKanji.trim()}（${editFront.trim()}）` : editFront.trim();
     try {
       setSubmitting(true);
+      const editChoices = editWrongLines
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       await axios.put(
         apiUrl(`/api/flashcards/cards/${editingCard.id}`),
-        { front, back: editBack.trim(), example: editExample.trim() },
+        {
+          front,
+          back: editBack.trim(),
+          example: editExample.trim(),
+          hiragana: editHiraganaExtra.trim() || undefined,
+          choices: editChoices,
+        },
         { headers: { "x-user": encodeURIComponent(activeUser) } }
       );
       setEditingCard(null);
@@ -314,6 +397,30 @@ export default function Flashcards() {
     setStudyComplete(false);
     setCompletedCount(0);
     setEditingCard(null);
+    setOpenedViaShare(false);
+    setDeckMainTab("memo");
+    if (shareTokenParam) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("share");
+      setSearchParams(next, { replace: true });
+    }
+  };
+
+  const copyDeckShareLink = async () => {
+    if (!selectedDeck || openedViaShare) return;
+    try {
+      const res = await axios.post<{ shareToken: string }>(
+        apiUrl(`/api/flashcards/decks/${selectedDeck.id}/share`),
+        {},
+        { headers: { "x-user": encodeURIComponent(activeUser) } }
+      );
+      const url = `${window.location.origin}/flashcards?share=${res.data.shareToken}`;
+      await navigator.clipboard.writeText(url);
+      setError(null);
+      alert("Đã copy link chia sẻ. Người nhận đăng nhập vào app rồi mở link để xem / học / kiểm tra.");
+    } catch {
+      setError("Không tạo được link chia sẻ (chỉ chủ deck mới được).");
+    }
   };
 
   if (selectedDeck && cards.length > 0) {
@@ -321,39 +428,93 @@ export default function Flashcards() {
     const studyCards = studyFilter === "needReview" ? needReviewCards : cards;
     const safeIndex = Math.min(Math.max(0, currentCard), studyCards.length - 1);
     const card = studyCards[safeIndex];
-    const isOwner = selectedDeck.ownerName === activeUser || isAdmin;
+    const isOwner = !openedViaShare && (selectedDeck.ownerName === activeUser || isAdmin);
     const learnedCount = cards.filter((c) => c.learned).length;
 
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={goBack}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ChevronLeft size={16} /> Quay lại
-          </button>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-4 mb-6">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <button
-              onClick={() => setViewMode(viewMode === "study" ? "list" : "study")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-muted hover:bg-muted/80"
-              title={viewMode === "study" ? "Xem danh sách thẻ" : "Chế độ học"}
+              onClick={goBack}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
             >
-              {viewMode === "study" ? <List size={16} /> : <LayoutGrid size={16} />}
-              {viewMode === "study" ? "Danh sách" : "Học"}
+              <ChevronLeft size={16} /> Quay lại
             </button>
-            {isOwner && (
-              <button
-                onClick={() => setShowCardForm(true)}
-                className="text-sm text-primary hover:underline flex items-center gap-1"
-              >
-                <Plus size={14} /> Thêm thẻ
-              </button>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              {openedViaShare && (
+                <span className="text-xs px-2 py-1 rounded-full bg-primary/15 text-primary">Xem qua link chia sẻ</span>
+              )}
+              {selectedDeck.isOfficial && (
+                <span className="text-xs px-2 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                  Chương trình học
+                </span>
+              )}
+              {isOwner && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => copyDeckShareLink()}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-border hover:bg-muted"
+                  >
+                    Copy link chia sẻ
+                  </button>
+                  <button
+                    onClick={() => setShowCardForm(true)}
+                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={14} /> Thêm thẻ
+                  </button>
+                </>
+              )}
+            </div>
           </div>
+
+          {/* Ba chế độ chính: thẻ ghi nhớ / học / kiểm tra */}
+          <div className="flex gap-2 p-1 rounded-xl bg-muted/80 w-full max-w-md">
+            {(
+              [
+                { id: "memo" as const, label: "📘 Thẻ ghi nhớ" },
+                { id: "learn" as const, label: "📗 Học" },
+                { id: "test" as const, label: "📕 Kiểm tra" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setDeckMainTab(t.id)}
+                className={`flex-1 px-2 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                  deckMainTab === t.id ? "gradient-bg text-primary-foreground shadow-sm" : "hover:bg-background/80"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {deckMainTab === "memo" && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === "study" ? "list" : "study")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-muted hover:bg-muted/80"
+                title={viewMode === "study" ? "Xem danh sách thẻ" : "Chế độ lật thẻ"}
+              >
+                {viewMode === "study" ? <List size={16} /> : <LayoutGrid size={16} />}
+                {viewMode === "study" ? "Danh sách" : "Lật thẻ"}
+              </button>
+            </div>
+          )}
         </div>
 
-        {viewMode === "list" ? (
+        {deckMainTab === "learn" && (
+          <FlashcardLearningMode cards={cards} maxCards={20} onBack={() => setDeckMainTab("memo")} />
+        )}
+
+        {deckMainTab === "test" && (
+          <FlashcardTestMode cards={cards} onBack={() => setDeckMainTab("memo")} />
+        )}
+
+        {deckMainTab === "memo" && (viewMode === "list" ? (
           <div className="max-w-2xl mx-auto">
             <h2 className="text-xl font-bold font-jp mb-2">{selectedDeck.title}</h2>
             <div className="flex gap-2 mb-4">
@@ -445,6 +606,8 @@ export default function Flashcards() {
                             setEditKanji(kanji || "");
                             setEditBack(c.back);
                             setEditExample(c.example || "");
+                            setEditHiraganaExtra(c.hiragana || "");
+                            setEditWrongLines((c.choices || []).join("\n"));
                           }}
                           className="p-2 rounded-lg hover:bg-muted"
                           title="Sửa"
@@ -613,6 +776,8 @@ export default function Flashcards() {
                       setEditKanji(kanji || "");
                       setEditBack(card.back);
                       setEditExample(card.example || "");
+                      setEditHiraganaExtra(card.hiragana || "");
+                      setEditWrongLines((card.choices || []).join("\n"));
                     }}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm bg-muted hover:bg-muted/80"
                     title="Sửa thẻ"
@@ -677,7 +842,7 @@ export default function Flashcards() {
               />
             </div>
           </div>
-        )}
+        ))}
 
         {showCardForm && selectedDeck && (
           <motion.div
@@ -726,6 +891,19 @@ export default function Flashcards() {
                   onChange={(e) => setCardExample(e.target.value)}
                   placeholder="Ví dụ câu (tùy chọn)"
                   className="w-full px-3 py-2 rounded-lg border text-sm"
+                />
+                <input
+                  value={cardHiraganaExtra}
+                  onChange={(e) => setCardHiraganaExtra(e.target.value)}
+                  placeholder="Hiragana lưu riêng (tuỳ chọn — nếu trống vẫn dùng ô trên)"
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                />
+                <textarea
+                  value={cardWrongLines}
+                  onChange={(e) => setCardWrongLines(e.target.value)}
+                  placeholder="Đáp án nhiễu cho trắc nghiệm: mỗi dòng một nghĩa sai (tuỳ chọn)"
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
                 />
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setShowCardForm(false)} className="flex-1 px-4 py-2 rounded-lg border">
@@ -787,6 +965,19 @@ export default function Flashcards() {
                   onChange={(e) => setEditExample(e.target.value)}
                   placeholder="Ví dụ câu (tùy chọn)"
                   className="w-full px-3 py-2 rounded-lg border text-sm"
+                />
+                <input
+                  value={editHiraganaExtra}
+                  onChange={(e) => setEditHiraganaExtra(e.target.value)}
+                  placeholder="Hiragana lưu riêng (tuỳ chọn)"
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                />
+                <textarea
+                  value={editWrongLines}
+                  onChange={(e) => setEditWrongLines(e.target.value)}
+                  placeholder="Nghĩa sai (MCQ), mỗi dòng một đáp án"
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg border text-sm resize-none"
                 />
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setEditingCard(null)} className="flex-1 px-4 py-2 rounded-lg border">
@@ -974,14 +1165,23 @@ export default function Flashcards() {
                   </button>
                 )}
               </div>
-              <h3 className="font-semibold font-jp text-lg mb-1 line-clamp-2">{deck.title}</h3>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h3 className="font-semibold font-jp text-lg line-clamp-2 flex-1 min-w-0">{deck.title}</h3>
+                {deck.isOfficial && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300 shrink-0">
+                    Chương trình
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
                 {deck.description}
               </p>
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span className="truncate">bởi {deck.ownerName || "Ẩn danh"}</span>
-                {deck.isPublic && (
+                {deck.isPublic ? (
                   <span className="shrink-0 text-primary">🌐 Public</span>
+                ) : (
+                  <span className="shrink-0 text-muted-foreground">🔒 Riêng tư</span>
                 )}
               </div>
             </motion.div>
@@ -1060,8 +1260,18 @@ export default function Flashcards() {
                     checked={deckPublic}
                     onChange={(e) => setDeckPublic(e.target.checked)}
                   />
-                  <span className="text-sm">Công khai</span>
+                  <span className="text-sm">Công khai (mọi người thấy trong danh sách)</span>
                 </label>
+                {isAdmin && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deckOfficial}
+                      onChange={(e) => setDeckOfficial(e.target.checked)}
+                    />
+                    <span className="text-sm">Deck chương trình học (badge &quot;Chương trình&quot;)</span>
+                  </label>
+                )}
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"
