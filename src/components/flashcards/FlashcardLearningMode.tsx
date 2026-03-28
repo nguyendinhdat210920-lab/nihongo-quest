@@ -1,7 +1,8 @@
 /**
  * Chế độ Học: mỗi thẻ 2 bước — (1) trắc nghiệm nghĩa (2) gõ lại cách đọc (hiragana).
+ * Tiến độ lưu trong localStorage theo deckId (xem flashcardProgressStorage.ts).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { ChevronLeft, RotateCcw } from "lucide-react";
 import type { FlashCardModel } from "@/lib/flashcardLearnUtils";
 import {
@@ -11,46 +12,129 @@ import {
   answersMatch,
   type NormalizedCard,
 } from "@/lib/flashcardLearnUtils";
+import { clearLearnProgress, loadLearnProgress, saveLearnProgress } from "@/lib/flashcardProgressStorage";
 
 type Phase = "mcq" | "type" | "done";
 
 interface Props {
   cards: FlashCardModel[];
+  deckId: number;
   maxCards?: number;
   onBack: () => void;
 }
 
-export default function FlashcardLearningMode({ cards, maxCards = 20, onBack }: Props) {
-  const normalized = useMemo(() => cards.map(normalizeCard), [cards]);
-  const queue = useMemo(() => {
-    const cap = Math.min(maxCards, normalized.length);
-    return shuffle([...normalized]).slice(0, cap);
-  }, [normalized, maxCards]);
+export default function FlashcardLearningMode({ cards, deckId, maxCards = 20, onBack }: Props) {
+  /** Khi danh sách id thẻ đổi → phiên mới (không dùng ref cards để tránh reset do re-render) */
+  const fingerprint = useMemo(
+    () =>
+      [...cards]
+        .map((c) => c.id)
+        .sort((a, b) => a - b)
+        .join(","),
+    [cards],
+  );
 
+  const [queue, setQueue] = useState<NormalizedCard[]>([]);
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("mcq");
   const [mcqPicked, setMcqPicked] = useState<string | null>(null);
   const [typeValue, setTypeValue] = useState("");
   const [typeChecked, setTypeChecked] = useState<"idle" | "ok" | "bad">("idle");
-  /** Số thẻ đã hoàn thành cả 2 bước (gõ đọc đúng) */
   const [completedCount, setCompletedCount] = useState(0);
+  const [resumeNotice, setResumeNotice] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!cards.length) {
+      setQueue([]);
+      return;
+    }
+    const normalized = cards.map(normalizeCard);
+    const idSet = new Set(normalized.map((n) => n.id));
+    const saved = loadLearnProgress(deckId);
+    const map = new Map(normalized.map((n) => [n.id, n]));
+
+    const freshQueue = () => {
+      const cap = Math.min(maxCards, normalized.length);
+      return shuffle([...normalized]).slice(0, cap);
+    };
+
+    let fromSave = false;
+    if (saved && saved.queueIds.length > 0 && saved.queueIds.every((id) => idSet.has(id))) {
+      const rebuilt = saved.queueIds.map((id) => map.get(id)).filter(Boolean) as NormalizedCard[];
+      if (rebuilt.length === saved.queueIds.length) {
+        setQueue(rebuilt);
+        setIndex(Math.min(saved.index, Math.max(0, rebuilt.length - 1)));
+        setPhase(saved.phase === "type" ? "type" : "mcq");
+        setCompletedCount(Math.min(saved.completedCount, rebuilt.length));
+        fromSave = true;
+      } else {
+        const q = freshQueue();
+        setQueue(q);
+        setIndex(0);
+        setPhase("mcq");
+        setCompletedCount(0);
+      }
+    } else {
+      const q = freshQueue();
+      setQueue(q);
+      setIndex(0);
+      setPhase("mcq");
+      setCompletedCount(0);
+    }
+
+    setMcqPicked(null);
+    setTypeValue("");
+    setTypeChecked("idle");
+    setResumeNotice(fromSave);
+    // fingerprint đại diện cho nội dung bộ thẻ; cards lấy từ closure mới nhất khi fingerprint đổi
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ reset khi deck / bộ id thẻ đổi
+  }, [deckId, fingerprint, maxCards]);
+
+  useEffect(() => {
+    if (!resumeNotice) return;
+    const t = window.setTimeout(() => setResumeNotice(false), 5000);
+    return () => clearTimeout(t);
+  }, [resumeNotice]);
+
+  /** Lưu nhẹ sau mỗi thay đổi (đóng tab / đổi chế độ vẫn còn tiến độ) */
+  useEffect(() => {
+    if (!queue.length || phase === "done") return;
+    const h = window.setTimeout(() => {
+      saveLearnProgress(deckId, {
+        queueIds: queue.map((c) => c.id),
+        index,
+        phase: phase === "mcq" || phase === "type" ? phase : "mcq",
+        completedCount,
+      });
+    }, 400);
+    return () => clearTimeout(h);
+  }, [deckId, queue, index, phase, completedCount]);
+
+  useEffect(() => {
+    if (phase === "done") clearLearnProgress(deckId);
+  }, [deckId, phase]);
 
   const current: NormalizedCard | undefined = queue[index];
 
   const mcqOptions = useMemo(() => {
     if (!current) return [];
-    const wrong = meaningDistractors(current, normalized, 3);
+    const wrong = meaningDistractors(current, cards.map(normalizeCard), 3);
     const opts = shuffle([current.meaning, ...wrong].filter(Boolean));
     return opts;
-  }, [current, normalized]);
+  }, [current, cards]);
 
   const resetSession = () => {
+    clearLearnProgress(deckId);
+    const normalized = cards.map(normalizeCard);
+    const cap = Math.min(maxCards, normalized.length);
+    setQueue(shuffle([...normalized]).slice(0, cap));
     setIndex(0);
     setPhase("mcq");
     setMcqPicked(null);
     setTypeValue("");
     setTypeChecked("idle");
     setCompletedCount(0);
+    setResumeNotice(false);
   };
 
   if (!queue.length) {
@@ -144,6 +228,12 @@ export default function FlashcardLearningMode({ cards, maxCards = 20, onBack }: 
           Thẻ {index + 1} / {queue.length}
         </span>
       </div>
+
+      {resumeNotice && (
+        <p className="text-xs text-center text-primary bg-primary/10 rounded-lg py-2 px-3">
+          Đã khôi phục tiến độ lần học trước trên trình duyệt này.
+        </p>
+      )}
 
       {phase === "mcq" && current && (
         <div className="glass-card p-6 rounded-2xl border space-y-4">

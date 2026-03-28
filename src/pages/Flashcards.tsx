@@ -24,6 +24,7 @@ import { apiUrl } from "@/lib/api";
 import { speakText, parseFrontDisplay } from "@/lib/speakText";
 import FlashcardLearningMode from "@/components/flashcards/FlashcardLearningMode";
 import FlashcardTestMode from "@/components/flashcards/FlashcardTestMode";
+import { loadMemoProgress, saveMemoProgress } from "@/lib/flashcardProgressStorage";
 
 interface Deck {
   id: number;
@@ -135,6 +136,13 @@ export default function Flashcards() {
     fetchDecks();
   }, [showOnlyMine]);
 
+  /** Lưu vị trí thẻ + bộ lọc (Tất cả / Cần ôn) ở tab Thẻ ghi nhớ */
+  useEffect(() => {
+    if (!selectedDeck?.id || cards.length === 0) return;
+    if (deckMainTab !== "memo") return;
+    saveMemoProgress(selectedDeck.id, currentCard, studyFilter);
+  }, [selectedDeck?.id, cards.length, currentCard, studyFilter, deckMainTab]);
+
   const shareTokenParam = searchParams.get("share");
 
   /** Mở deck từ link ?share=... (học / kiểm tra, không chỉnh sửa) */
@@ -213,7 +221,14 @@ export default function Flashcards() {
       setCards(res.data.cards);
       setOpenedViaShare(false);
       setDeckMainTab("memo");
-      setCurrentCard(0);
+      const memo = loadMemoProgress(deckId);
+      if (memo && res.data.cards.length > 0) {
+        setStudyFilter(memo.studyFilter);
+        setCurrentCard(Math.min(memo.currentCard, res.data.cards.length - 1));
+      } else {
+        setCurrentCard(0);
+        setStudyFilter("all");
+      }
       setFlipped(false);
     } catch (err) {
       console.error("Failed to fetch deck", err);
@@ -507,7 +522,12 @@ export default function Flashcards() {
         </div>
 
         {deckMainTab === "learn" && (
-          <FlashcardLearningMode cards={cards} maxCards={20} onBack={() => setDeckMainTab("memo")} />
+          <FlashcardLearningMode
+            deckId={selectedDeck.id}
+            cards={cards}
+            maxCards={20}
+            onBack={() => setDeckMainTab("memo")}
+          />
         )}
 
         {deckMainTab === "test" && (
