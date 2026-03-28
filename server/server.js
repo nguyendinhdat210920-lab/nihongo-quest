@@ -33,6 +33,29 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Ping - kiểm tra server nhận request (không cần DB)
 app.get("/api/ping", (req, res) => res.json({ pong: true }));
 
+// Proxy Jisho (trình duyệt không gọi trực tiếp jisho.org được do CORS)
+app.get("/api/jisho/words", async (req, res) => {
+  const raw = String(req.query.keyword ?? "").trim();
+  if (!raw) {
+    return res.status(400).json({ meta: { status: 400 }, data: [], error: "missing keyword" });
+  }
+  const keyword = raw.slice(0, 80);
+  try {
+    const url = `https://jisho.org/api/v1/search/words?keyword=${encodeURIComponent(keyword)}`;
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!resp.ok) {
+      return res.status(502).json({ meta: { status: resp.status }, data: [], error: "jisho upstream" });
+    }
+    const data = await resp.json();
+    res.json(data);
+  } catch (e) {
+    console.error("Jisho proxy error:", e);
+    res.status(500).json({ meta: { status: 500 }, data: [], error: e?.message || "proxy error" });
+  }
+});
+
 // Health check - kiểm tra DB
 app.get("/api/health", async (req, res) => {
   try {

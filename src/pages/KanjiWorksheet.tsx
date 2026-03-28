@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { motion } from "framer-motion";
 import { Copy, Download, Eraser, RefreshCcw, Sparkles, Undo2, Wand2 } from "lucide-react";
 import { jsPDF } from "jspdf";
+import { apiUrl } from "@/lib/api";
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[] };
@@ -609,7 +610,8 @@ export default function KanjiWorksheet() {
         setSuggestLoading(true);
 
         const keyword = encodeURIComponent(q.slice(-20));
-        const resp = await fetch(`https://jisho.org/api/v1/search/words?keyword=${keyword}`, { signal: ac.signal });
+        const jishoUrl = `${apiUrl("/api/jisho/words")}?keyword=${keyword}`;
+        const resp = await fetch(jishoUrl, { signal: ac.signal });
         if (!resp.ok) throw new Error("bad response");
         const data = await resp.json();
         const words: string[] = [];
@@ -618,7 +620,7 @@ export default function KanjiWorksheet() {
           const w1 = jp?.word;
           const r1 = jp?.reading;
           if (typeof w1 === "string" && w1) words.push(w1);
-          else if (typeof r1 === "string" && r1) words.push(r1);
+          if (typeof r1 === "string" && r1 && r1 !== w1) words.push(r1);
           if (words.length >= SUGGEST_LIMIT) break;
         }
         setSuggestions([...new Set(words)].slice(0, SUGGEST_LIMIT));
