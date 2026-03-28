@@ -751,7 +751,7 @@ export default function KanjiWorksheet() {
                     isComposingRef.current = false;
                     setIsComposing(false);
                   }}
-                  placeholder="Ví dụ: gõ wa → chọn 和 / わ… hoặc dán 山川花木"
+                  placeholder="Ví dụ: gõ kani → chọn 蟹 / カニ… hoặc dán 山川花木"
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-ring focus:outline-none font-jp text-lg resize-none"
                   autoComplete="off"
@@ -801,9 +801,7 @@ export default function KanjiWorksheet() {
                 )}
               </div>
 
-              <p className="mt-2 text-xs text-muted-foreground">
-                Gợi ý: ↑ ↓ chọn dòng, Enter chọn, Esc đóng. IME hệ thống: gõ bình thường, không chặn composition.
-              </p>
+              <p className="mt-2 text-xs text-muted-foreground">Gợi ý: ↑ ↓ chọn dòng, Enter chọn.</p>
 
               <div className="mt-4 flex gap-3">
                 <button
