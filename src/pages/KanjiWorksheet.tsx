@@ -751,7 +751,7 @@ export default function KanjiWorksheet() {
                     isComposingRef.current = false;
                     setIsComposing(false);
                   }}
-                  placeholder="Ví dụ: gõ kani → chọn 蟹 / カニ… hoặc dán 山川花木"
+                  placeholder="Ví dụ: 山川花木 日本語"
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-ring focus:outline-none font-jp text-lg resize-none"
                   autoComplete="off"
